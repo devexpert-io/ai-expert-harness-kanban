@@ -40,11 +40,10 @@ button { font: inherit; cursor: pointer; }
 .button-quiet { color: var(--muted); }
 .project-picker { margin: 12px 0 -10px; color: var(--muted); font-size: 10px; }
 .project-picker summary { width: fit-content; cursor: pointer; color: #9fa9c3; }
-.project-picker summary span { margin-left: 8px; color: #6f7b9d; }
-.project-picker form { display: flex; gap: 7px; max-width: 700px; margin-top: 10px; }
-.project-picker input { flex: 1; min-width: 220px; border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; color: var(--text); background: #101421; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; outline: 0; }
-.project-picker input:focus { border-color: #667396; }
+.project-picker summary #engineStatus { margin-left: 8px; color: #6f7b9d; }
+.project-controls { display: flex; gap: 7px; margin-top: 10px; }
 .project-picker p { margin: 7px 0 0; color: #687391; }
+.project-picker .selected-folder { color: #aeb7cf; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
 
 .workspace-heading { display: flex; justify-content: space-between; align-items: end; gap: 24px; padding: 28px 0 20px; }
 .eyebrow { margin: 0 0 5px; color: #8996bd; font-size: 9px; font-weight: 850; letter-spacing: .14em; }
@@ -112,7 +111,7 @@ h1 { margin: 0; font-size: 28px; line-height: 1.1; letter-spacing: -.035em; }
 @media (max-width: 850px) {
   .app-shell { padding: 0 16px 24px; }
   .repo { display: none; }
-  .project-picker form { flex-wrap: wrap; }
+  .project-controls { flex-wrap: wrap; }
   .workspace-heading { align-items: start; }
   .summary { gap: 10px; flex-direction: column; text-align: right; }
   .evidence-panel { grid-template-columns: 1fr; gap: 16px; }

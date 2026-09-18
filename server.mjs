@@ -7,7 +7,7 @@ import { runMockTask } from './harness/mock-engine.mjs';
 import { runPiTask } from './harness/pi-engine.mjs';
 import { RunStore } from './harness/run-store.mjs';
 import { getTaskDefinition } from './harness/task-catalog.mjs';
-import { inspectProject } from './harness/project-contract.mjs';
+import { chooseProject } from './harness/project-selector.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT ?? 4173);
@@ -97,9 +97,11 @@ const server = createServer(async (request, response) => {
         }
       });
     }
-    if (request.method === 'POST' && url.pathname === '/api/projects/inspect') {
-      const body = await readJson(request);
-      const project = inspectProject(body.path);
+    if (request.method === 'POST' && url.pathname === '/api/projects/select') {
+      let project;
+      try { project = await chooseProject(); }
+      catch { return json(response, 500, { error: 'No se pudo abrir o leer la carpeta seleccionada' }); }
+      if (!project) return json(response, 200, { cancelled: true });
       selectedProjects.set(project.path, project);
       return json(response, 200, project);
     }

@@ -31,13 +31,13 @@ Pi está deshabilitado por defecto. Para permitir una ejecución real:
 PI_ALLOW_MUTATIONS=true pnpm dev
 ```
 
-La carpeta objetivo se debe seleccionar explícitamente en la interfaz antes de ejecutar. Pi hereda su configuración y credenciales locales; opcionalmente admite `PI_BIN`, `PI_PROVIDER`, `PI_MODEL` y `PI_TIMEOUT_MS`. El servidor no almacena ni muestra secretos.
+La carpeta objetivo se debe seleccionar explícitamente con el diálogo nativo de macOS antes de ejecutar. Pi hereda su configuración y credenciales locales; opcionalmente admite `PI_BIN`, `PI_PROVIDER`, `PI_MODEL` y `PI_TIMEOUT_MS`. El servidor no almacena ni muestra secretos.
 
 Cada prompt impone límites explícitos: trabajar sólo en el proyecto seleccionado y no hacer merge, push, deploy, cambios de credenciales ni operaciones de producción. La aplicación no integra GitHub y nunca fusiona PRs automáticamente.
 
 ## Contrato de proyecto
 
-La interfaz sólo inspecciona dos rutas convencionales dentro de la carpeta que el usuario escribe y carga explícitamente:
+La interfaz sólo inspecciona dos rutas convencionales dentro de la carpeta autorizada mediante el selector nativo:
 
 - `feature_list.json` — obligatorio para cargar tareas.
 - `.harness/config.json` — opcional para configuración del harness.

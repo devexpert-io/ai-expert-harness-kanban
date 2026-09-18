@@ -36,8 +36,9 @@ const engineSelect = document.querySelector('#engineSelect');
 const engineStatus = document.querySelector('#engineStatus');
 const projectName = document.querySelector('#projectName');
 const contextLabel = document.querySelector('#contextLabel');
-const projectForm = document.querySelector('#projectForm');
-const projectPath = document.querySelector('#projectPath');
+const projectButton = document.querySelector('#projectButton');
+const projectSummary = document.querySelector('#projectSummary');
+const selectedFolder = document.querySelector('#selectedFolder');
 const projectMessage = document.querySelector('#projectMessage');
 const demoButton = document.querySelector('#demoButton');
 const evidencePanel = document.querySelector('.evidence-panel');
@@ -357,22 +358,33 @@ function useDemo() {
   currentProject = null;
   projectName.textContent = 'Demo local';
   contextLabel.textContent = 'WAVE-042 · DEMO LOCAL';
+  projectSummary.textContent = 'Seleccionar proyecto';
+  selectedFolder.textContent = 'Ninguna carpeta seleccionada';
+  projectButton.textContent = 'Elegir carpeta…';
   projectMessage.textContent = 'Modo mock determinista; no accede a ningún proyecto.';
-  projectForm.closest('details').open = false;
+  projectButton.closest('details').open = false;
   tasks = prepareTasks(demoTasks);
   sourceTasks = structuredClone(tasks);
   selectedId = 'DX-176';
   resetCurrent();
 }
 
-async function loadProject(path) {
-  projectMessage.textContent = 'Inspeccionando contrato…';
-  const response = await fetch('/api/projects/inspect', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path }) });
+async function selectProject() {
+  projectButton.disabled = true;
+  projectButton.textContent = 'Abriendo selector…';
+  projectMessage.textContent = 'Esperando la selección de una carpeta…';
+  const response = await fetch('/api/projects/select', { method: 'POST' });
   const project = await response.json();
-  if (!response.ok) throw new Error(project.error ?? 'No se pudo inspeccionar el proyecto');
+  if (!response.ok) throw new Error(project.error ?? 'No se pudo abrir la carpeta');
+  if (project.cancelled) {
+    projectMessage.textContent = currentProject ? 'Selección cancelada; se mantiene el proyecto actual.' : 'Selección cancelada; continúa la demo.';
+    return;
+  }
   currentProject = project;
   projectName.textContent = project.name;
   contextLabel.textContent = 'PROYECTO · LOCAL';
+  projectSummary.textContent = `Proyecto: ${project.name}`;
+  selectedFolder.textContent = project.path;
   projectMessage.textContent = [
     project.files.tasks ? 'feature_list.json cargado' : 'feature_list.json ausente',
     project.files.config ? '.harness/config.json cargado' : 'config opcional ausente'
@@ -381,8 +393,9 @@ async function loadProject(path) {
   sourceTasks = structuredClone(tasks);
   selectedId = tasks.find((task) => task.state === 'review')?.id ?? tasks[0]?.id ?? null;
   resetCurrent();
-  projectForm.closest('details').open = false;
+  projectButton.closest('details').open = false;
   if (project.config?.defaultEngine === 'pi' && !engineSelect.options[1].disabled) engineSelect.value = 'pi';
+  projectButton.textContent = 'Cambiar carpeta…';
 }
 
 async function loadEngineStatus() {
@@ -398,9 +411,12 @@ async function loadEngineStatus() {
   }
 }
 
-projectForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  try { await loadProject(projectPath.value.trim()); } catch (error) { projectMessage.textContent = error.message; }
+projectButton.addEventListener('click', async () => {
+  try { await selectProject(); } catch (error) { projectMessage.textContent = error.message; }
+  finally {
+    projectButton.disabled = false;
+    projectButton.textContent = currentProject ? 'Cambiar carpeta…' : 'Elegir carpeta…';
+  }
 });
 demoButton.addEventListener('click', useDemo);
 waveButton.addEventListener('click', startWave);

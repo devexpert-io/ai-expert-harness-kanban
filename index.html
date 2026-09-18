@@ -23,13 +23,13 @@
       </header>
 
       <details class="project-picker">
-        <summary>Seleccionar proyecto <span id="engineStatus"></span></summary>
-        <form id="projectForm">
-          <input id="projectPath" name="path" autocomplete="off" placeholder="/ruta/absoluta/al/proyecto" />
-          <button class="button button-outline" type="submit">Cargar</button>
+        <summary><span id="projectSummary">Seleccionar proyecto</span> <span id="engineStatus"></span></summary>
+        <div class="project-controls">
+          <button class="button button-outline" type="button" id="projectButton">Elegir carpeta…</button>
           <button class="button button-quiet" type="button" id="demoButton">Volver a la demo</button>
-        </form>
-        <p id="projectMessage">Sólo se inspeccionan feature_list.json y .harness/config.json de la ruta seleccionada.</p>
+        </div>
+        <p class="selected-folder" id="selectedFolder">Ninguna carpeta seleccionada</p>
+        <p id="projectMessage">El selector nativo autoriza una carpeta; sólo se inspeccionan feature_list.json y .harness/config.json.</p>
       </details>
 
       <section class="workspace-heading">
