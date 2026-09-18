@@ -1,36 +1,35 @@
-{
-  "version": 1,
-  "tasks": [
-    {
-      "id": "EX-001",
-      "title": "Preparar endpoint de salud",
-      "state": "pending",
-      "role": "Implementer",
-      "skill": "feature-implementer",
-      "gate": "Contrato definido",
-      "evidence": ["Criterios cargados desde feature_list.json"]
-    },
-    {
-      "id": "EX-002",
-      "title": "Validar respuesta del catálogo",
-      "state": "validating",
-      "role": "Validator",
-      "skill": "feature-validator",
-      "gate": "Tests enfocados",
-      "evidence": ["Fixture local disponible", "Sin acceso a servicios externos"]
-    },
-    {
-      "id": "EX-003",
-      "title": "Confirmar criterio visual",
-      "state": "pending",
-      "role": "Planner",
-      "skill": "build-brief",
-      "gate": "Decisión pendiente",
-      "blocked": {
-        "reason": "Falta referencia visual",
-        "resolution": "Seleccionar una variante"
-      },
-      "evidence": []
-    }
-  ]
-}
+[
+  {
+    "id": "EX-001",
+    "area": "bootstrap",
+    "title": "Preparar endpoint de salud",
+    "user_visible_behavior": "La aplicación expone su estado de salud.",
+    "depends_on": [],
+    "status": "not_started",
+    "verification": ["El endpoint responde con estado correcto."],
+    "evidence": ["Criterios cargados desde feature_list.json"],
+    "notes": "Slice inicial sin dependencias."
+  },
+  {
+    "id": "EX-002",
+    "area": "catalog",
+    "title": "Validar respuesta del catálogo",
+    "user_visible_behavior": "La persona recibe un catálogo válido.",
+    "depends_on": ["EX-001"],
+    "status": "passing",
+    "verification": ["Los tests enfocados pasan."],
+    "evidence": ["Fixture local disponible", "Sin acceso a servicios externos"],
+    "notes": "Pendiente de aceptación independiente."
+  },
+  {
+    "id": "EX-003",
+    "area": "design",
+    "title": "Confirmar criterio visual",
+    "user_visible_behavior": "La interfaz usa la variante visual acordada.",
+    "depends_on": ["EX-001"],
+    "status": "blocked",
+    "verification": ["La variante coincide con la referencia aprobada."],
+    "evidence": [],
+    "notes": "Falta referencia visual; hay que seleccionar una variante."
+  }
+]

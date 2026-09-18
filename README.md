@@ -43,24 +43,24 @@ La interfaz sólo inspecciona dos rutas convencionales dentro de la carpeta auto
 `feature_list.json`:
 
 ```json
-{
-  "version": 1,
-  "tasks": [
-    {
-      "id": "APP-001",
-      "title": "Añadir búsqueda",
-      "state": "pending",
-      "role": "Implementer",
-      "skill": "feature-implementer",
-      "gate": "Tests enfocados",
-      "evidence": ["Criterios definidos"],
-      "blocked": null
-    }
-  ]
-}
+[
+  {
+    "id": "APP-001",
+    "area": "catalog",
+    "title": "Añadir búsqueda",
+    "user_visible_behavior": "La persona encuentra productos por texto.",
+    "depends_on": ["APP-000"],
+    "status": "not_started",
+    "verification": ["La búsqueda devuelve coincidencias relevantes."],
+    "evidence": [],
+    "notes": "Slice preparado para implementación."
+  }
+]
 ```
 
-Estados válidos: `pending`, `planning`, `implementing`, `validating`, `review` y `done`. Un bloqueo es una condición opcional con `{ "reason": "...", "resolution": "..." }`, no una columna.
+Este es el único formato admitido: una lista JSON directa cuyos objetos contienen exactamente esos nueve campos. No se aceptan contenedores `{ "version": 1, "tasks": [...] }`, alias camelCase ni campos adicionales.
+
+Estados válidos: `not_started`, `planned`, `planning`, `in_progress`, `implementing`, `passing`, `validating`, `review`, `accepted`, `done` y `blocked`. En estado `blocked`, `notes` describe la condición bloqueante.
 
 `.harness/config.json`:
 

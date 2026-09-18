@@ -1,8 +1,7 @@
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, isAbsolute, join } from 'node:path';
 
-const states = new Set(['pending', 'planning', 'implementing', 'validating', 'review', 'done']);
-const legacyStates = new Map([
+const sourceStates = new Map([
   ['not_started', 'pending'],
   ['planned', 'planning'],
   ['planning', 'planning'],
@@ -15,7 +14,7 @@ const legacyStates = new Map([
   ['done', 'done'],
   ['blocked', 'pending']
 ]);
-const legacyGates = new Map([
+const sourceGates = new Map([
   ['not_started', 'Pendiente'],
   ['planned', 'Planificada'],
   ['planning', 'Planificando'],
@@ -29,6 +28,17 @@ const legacyGates = new Map([
   ['blocked', 'Bloqueada']
 ]);
 const maxFileBytes = 1_000_000;
+const featureFields = new Set([
+  'id',
+  'area',
+  'title',
+  'user_visible_behavior',
+  'depends_on',
+  'status',
+  'verification',
+  'evidence',
+  'notes'
+]);
 
 function readOptionalJson(path) {
   try {
@@ -43,43 +53,43 @@ function readOptionalJson(path) {
 }
 
 function stringList(value, field, index) {
-  if (value == null) return [];
   if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
-    throw new Error(`tasks[${index}].${field} debe ser una lista de textos`);
+    throw new Error(`feature_list[${index}].${field} debe ser una lista de textos`);
   }
   return [...value];
 }
 
-function validateTask(task, index, legacy = false) {
-  if (!task || typeof task !== 'object') throw new Error(`tasks[${index}] debe ser un objeto`);
-  if (typeof task.id !== 'string' || !task.id.trim()) throw new Error(`tasks[${index}].id es obligatorio`);
-  if (typeof task.title !== 'string' || !task.title.trim()) throw new Error(`tasks[${index}].title es obligatorio`);
-  const sourceStatus = legacy ? task.status : task.state;
-  const state = legacy ? legacyStates.get(sourceStatus) : sourceStatus;
-  if (!states.has(state)) throw new Error(`tasks[${index}].${legacy ? 'status' : 'state'} no es válido: ${sourceStatus}`);
-  if (task.blocked != null && (typeof task.blocked !== 'object' || typeof task.blocked.reason !== 'string')) {
-    throw new Error(`tasks[${index}].blocked debe incluir reason`);
+function requiredText(task, field, index) {
+  if (typeof task[field] !== 'string' || !task[field].trim()) {
+    throw new Error(`feature_list[${index}].${field} debe ser un texto no vacío`);
   }
-  const blocked = task.blocked
-    ? { reason: task.blocked.reason, resolution: task.blocked.resolution ?? null }
-    : legacy && sourceStatus === 'blocked'
-      ? { reason: task.notes || 'Marcada como bloqueada en feature_list.json', resolution: null }
-      : null;
+  return task[field].trim();
+}
+
+function validateTask(task, index) {
+  if (!task || typeof task !== 'object' || Array.isArray(task)) throw new Error(`feature_list[${index}] debe ser un objeto`);
+  const unknownField = Object.keys(task).find((field) => !featureFields.has(field));
+  if (unknownField) throw new Error(`feature_list[${index}] contiene un campo no admitido: ${unknownField}`);
+  const missingField = [...featureFields].find((field) => !Object.hasOwn(task, field));
+  if (missingField) throw new Error(`feature_list[${index}] no incluye el campo obligatorio: ${missingField}`);
+  const sourceStatus = requiredText(task, 'status', index);
+  const state = sourceStates.get(sourceStatus);
+  if (!state) throw new Error(`feature_list[${index}].status no es válido: ${sourceStatus}`);
   return {
-    id: task.id.trim(),
-    title: task.title.trim(),
+    id: requiredText(task, 'id', index),
+    title: requiredText(task, 'title', index),
     state,
     sourceStatus,
-    area: typeof task.area === 'string' ? task.area : null,
-    objective: typeof task.user_visible_behavior === 'string' ? task.user_visible_behavior : null,
-    role: typeof task.role === 'string' ? task.role : null,
-    skill: typeof task.skill === 'string' ? task.skill : null,
-    gate: typeof task.gate === 'string' ? task.gate : legacyGates.get(sourceStatus) ?? null,
-    blocked,
-    dependsOn: stringList(task.dependsOn ?? task.depends_on, 'dependsOn', index),
-    criteria: stringList(task.criteria ?? task.verification, 'criteria', index),
+    area: requiredText(task, 'area', index),
+    objective: requiredText(task, 'user_visible_behavior', index),
+    role: null,
+    skill: null,
+    gate: sourceGates.get(sourceStatus),
+    blocked: sourceStatus === 'blocked' ? { reason: task.notes, resolution: null } : null,
+    dependsOn: stringList(task.depends_on, 'depends_on', index),
+    criteria: stringList(task.verification, 'verification', index),
     evidence: stringList(task.evidence, 'evidence', index),
-    notes: typeof task.notes === 'string' ? task.notes : null
+    notes: requiredText(task, 'notes', index)
   };
 }
 
@@ -112,14 +122,10 @@ export function inspectProject(explicitPath) {
   const taskDocument = readOptionalJson(taskFile);
   const configDocument = readOptionalJson(configFile);
 
-  const legacy = Array.isArray(taskDocument);
-  if (taskDocument && !legacy && (taskDocument.version !== 1 || !Array.isArray(taskDocument.tasks))) {
-    throw new Error('feature_list.json debe ser una lista de features o usar { "version": 1, "tasks": [...] }');
-  }
+  if (taskDocument && !Array.isArray(taskDocument)) throw new Error('feature_list.json debe ser una lista JSON de features');
   const config = validateConfig(configDocument);
 
-  const sourceTasks = taskDocument ? (legacy ? taskDocument : taskDocument.tasks) : [];
-  const tasks = sourceTasks.map((task, index) => validateTask(task, index, legacy));
+  const tasks = (taskDocument ?? []).map(validateTask);
   const duplicate = tasks.find((task, index) => tasks.findIndex((candidate) => candidate.id === task.id) !== index);
   if (duplicate) throw new Error(`ID de tarea duplicado: ${duplicate.id}`);
   const ids = new Set(tasks.map((task) => task.id));
@@ -130,7 +136,7 @@ export function inspectProject(explicitPath) {
     path: projectPath,
     name: basename(projectPath),
     tasks,
-    format: legacy ? 'feature-list' : 'harness-v1',
+    format: 'feature-list',
     config,
     files: { tasks: Boolean(taskDocument), config: Boolean(configDocument) },
     emptyReason: taskDocument ? (tasks.length ? null : 'feature_list.json no contiene tareas') : 'Falta feature_list.json'

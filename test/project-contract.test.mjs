@@ -12,7 +12,7 @@ test('carga tareas, estados, bloqueos y configuración del proyecto seleccionado
   const project = inspectProject(join(root, 'examples', 'sample-project'));
   assert.equal(project.tasks.length, 3);
   assert.equal(project.tasks[1].state, 'validating');
-  assert.equal(project.tasks[2].blocked.reason, 'Falta referencia visual');
+  assert.equal(project.tasks[2].blocked.reason, 'Falta referencia visual; hay que seleccionar una variante.');
   assert.equal(project.config.defaultEngine, 'mock');
   assert.deepEqual(project.files, { tasks: true, config: true });
 });
@@ -57,7 +57,8 @@ test('carga el feature_list real con estados y dependencias', () => {
       depends_on: ['base'],
       status: 'not_started',
       verification: ['Existe una prueba.'],
-      evidence: []
+      evidence: [],
+      notes: 'Lista para implementar.'
     }
   ]));
   const project = inspectProject(projectPath);
@@ -66,4 +67,19 @@ test('carga el feature_list real con estados y dependencias', () => {
   assert.deepEqual(project.tasks[1].dependsOn, ['base']);
   assert.equal(project.tasks[1].objective, 'La persona usa la siguiente feature.');
   assert.deepEqual(project.tasks[0].criteria, ['El gate pasa.']);
+});
+
+test('rechaza el antiguo contenedor versionado', () => {
+  const projectPath = mkdtempSync(join(tmpdir(), 'harness-wrapped-list-'));
+  writeFileSync(join(projectPath, 'feature_list.json'), JSON.stringify({ version: 1, tasks: [] }));
+  assert.throws(() => inspectProject(projectPath), /lista JSON de features/);
+});
+
+test('rechaza campos alternativos aunque expresen la misma información', () => {
+  const projectPath = mkdtempSync(join(tmpdir(), 'harness-alternate-fields-'));
+  writeFileSync(join(projectPath, 'feature_list.json'), JSON.stringify([{
+    id: 'wrong', area: 'test', title: 'Formato incorrecto', user_visible_behavior: 'No se carga.',
+    dependsOn: [], status: 'not_started', verification: [], evidence: [], notes: 'Usa dependsOn.'
+  }]));
+  assert.throws(() => inspectProject(projectPath), /campo no admitido: dependsOn/);
 });
