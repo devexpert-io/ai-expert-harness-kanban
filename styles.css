@@ -71,13 +71,13 @@ h1 { margin: 0; font-size: 28px; line-height: 1.1; letter-spacing: -.035em; }
 .empty-state p { max-width: 620px; margin: 0 auto; }
 .empty-state code { display: block; margin: 12px auto 0; color: #aab4cd; font-size: 10px; }
 .board { display: grid; grid-template-columns: repeat(6, minmax(205px, 1fr)); min-width: 1240px; }
-.column { min-height: 430px; padding: 12px 10px 14px; border-right: 1px solid #242a40; }
+.column { height: 510px; min-height: 430px; overflow: hidden; padding: 12px 10px 14px; border-right: 1px solid #242a40; }
 .column:last-child { border-right: 0; }
 .column-header { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 10px; }
 .column-title { display: flex; align-items: center; gap: 7px; color: #c5cce0; font-size: 10px; font-weight: 800; letter-spacing: .055em; text-transform: uppercase; white-space: nowrap; }
 .column-dot { width: 6px; height: 6px; border-radius: 50%; }
 .column-count { min-width: 18px; padding: 1px 5px; border-radius: 99px; color: #9ca7c4; background: #222940; text-align: center; font-size: 9px; }
-.task-list { display: grid; align-content: start; gap: 8px; }
+.task-list { display: grid; max-height: 454px; overflow-y: auto; align-content: start; gap: 8px; padding-right: 2px; scrollbar-color: #39415e transparent; scrollbar-width: thin; }
 .empty-column { padding: 28px 8px; color: #58627e; text-align: center; font-size: 10px; }
 
 .task-card { min-height: 132px; padding: 11px; border: 1px solid #313952; border-radius: 8px; background: var(--panel); outline: 0; transition: border-color .15s, background .15s; }
@@ -115,6 +115,7 @@ h1 { margin: 0; font-size: 28px; line-height: 1.1; letter-spacing: -.035em; }
 .evidence-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .evidence-list li { display: flex; gap: 6px; color: #aeb8d1; font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .evidence-list b { color: var(--green); }
+.evidence-list .more-evidence { color: #6f7a99; font-family: inherit; }
 .integrate-button { margin-top: 12px; }
 
 @media (max-width: 850px) {

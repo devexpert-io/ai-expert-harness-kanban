@@ -34,3 +34,36 @@ test('rechaza una configuración que omita la revisión humana', () => {
   writeFileSync(join(configPath, 'config.json'), JSON.stringify({ version: 1, autoMerge: true }));
   assert.throws(() => inspectProject(projectPath), /prohíbe autoMerge/i);
 });
+
+test('carga el feature_list real con estados y dependencias', () => {
+  const projectPath = mkdtempSync(join(tmpdir(), 'harness-feature-list-'));
+  writeFileSync(join(projectPath, 'feature_list.json'), JSON.stringify([
+    {
+      id: 'base',
+      area: 'bootstrap',
+      title: 'Base aceptada',
+      user_visible_behavior: 'La base está lista.',
+      depends_on: [],
+      status: 'accepted',
+      verification: ['El gate pasa.'],
+      evidence: ['pnpm test -> OK'],
+      notes: 'Validada.'
+    },
+    {
+      id: 'next',
+      area: 'ai',
+      title: 'Siguiente feature',
+      user_visible_behavior: 'La persona usa la siguiente feature.',
+      depends_on: ['base'],
+      status: 'not_started',
+      verification: ['Existe una prueba.'],
+      evidence: []
+    }
+  ]));
+  const project = inspectProject(projectPath);
+  assert.equal(project.format, 'feature-list');
+  assert.deepEqual(project.tasks.map((task) => task.state), ['done', 'pending']);
+  assert.deepEqual(project.tasks[1].dependsOn, ['base']);
+  assert.equal(project.tasks[1].objective, 'La persona usa la siguiente feature.');
+  assert.deepEqual(project.tasks[0].criteria, ['El gate pasa.']);
+});

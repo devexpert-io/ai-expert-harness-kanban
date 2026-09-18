@@ -43,8 +43,10 @@
           <p class="run-status" id="runLabel">Oleada preparada</p>
         </div>
         <div class="summary" aria-label="Resumen de la oleada">
-          <span><strong id="activeCount">0</strong> activas</span>
+          <span><strong id="pendingCount">0</strong> pendientes</span>
+          <span><strong id="activeCount">0</strong> en curso</span>
           <span><strong id="reviewCount">0</strong> en revisión</span>
+          <span><strong id="doneCount">0</strong> terminadas</span>
           <span class="blocked-summary"><strong id="blockerCount">0</strong> bloqueada</span>
         </div>
       </section>
@@ -72,7 +74,7 @@
       <article class="task-card" tabindex="0">
         <div class="card-top"><span class="issue"></span><span class="card-alert"></span></div>
         <h3></h3>
-        <div class="skill-row"><span>Skill</span><b class="skill"></b></div>
+        <div class="skill-row"><span class="meta-label">Skill</span><b class="skill"></b></div>
         <div class="gate-row"><span class="gate-icon">✓</span><span class="gate"></span></div>
         <footer><span class="owner"></span><span class="card-controls"><button class="card-action" type="button">Ejecutar</button><span class="avatar"></span></span></footer>
       </article>

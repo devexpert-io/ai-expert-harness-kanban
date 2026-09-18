@@ -10,6 +10,7 @@ import { getTaskDefinition } from './harness/task-catalog.mjs';
 import { chooseProject } from './harness/project-selector.mjs';
 import { ProjectSession } from './harness/project-session.mjs';
 import { inspectProject } from './harness/project-contract.mjs';
+import { taskReadiness } from './harness/task-readiness.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT ?? 4173);
@@ -111,14 +112,14 @@ const server = createServer(async (request, response) => {
       try {
         const project = await projectSession.choose(async () => inspectProject(current.path));
         return json(response, 200, project);
-      } catch {
-        return json(response, 500, { error: 'No se pudo volver a leer el proyecto' });
+      } catch (error) {
+        return json(response, 500, { error: `No se pudo recargar el proyecto: ${error.message}` });
       }
     }
     if (request.method === 'POST' && url.pathname === '/api/projects/select') {
       let project;
       try { project = await projectSession.choose(chooseProject); }
-      catch { return json(response, 500, { error: 'No se pudo abrir o leer la carpeta seleccionada' }); }
+      catch (error) { return json(response, 500, { error: `La carpeta se abrió, pero su contrato no es válido: ${error.message}` }); }
       if (!project) return json(response, 200, { cancelled: true });
       return json(response, 200, project);
     }
@@ -130,11 +131,14 @@ const server = createServer(async (request, response) => {
         ...projectTask,
         role: projectTask.role ?? 'Implementer',
         skill: projectTask.skill ?? 'feature-implementer',
-        objective: `Completa ${projectTask.title}. Gate esperado: ${projectTask.gate ?? 'evidencia reproducible'}.`
+        objective: projectTask.objective ?? `Completa ${projectTask.title}. Gate esperado: ${projectTask.gate ?? 'evidencia reproducible'}.`
       } : project ? null : getTaskDefinition(body.taskId);
       const engine = body.engine === 'pi' ? 'pi' : 'mock';
       if (!task) return json(response, 404, { error: 'Tarea no ejecutable' });
-      if (task.blocked) return json(response, 409, { error: `Tarea bloqueada: ${task.blocked.reason}` });
+      if (project) {
+        const readiness = taskReadiness(projectTask, project.tasks);
+        if (!readiness.ready) return json(response, 409, { error: readiness.reason });
+      } else if (task.blocked) return json(response, 409, { error: `Tarea bloqueada: ${task.blocked.reason}` });
       if (engine === 'pi' && !project) return json(response, 409, { error: 'Pi requiere un proyecto seleccionado explícitamente' });
       if (engine === 'pi' && !piEnabled) return json(response, 409, { error: 'Pi no está instalado' });
       const run = store.create({ taskId: task.id, engine, projectPath: project?.path ?? null });

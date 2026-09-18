@@ -52,8 +52,8 @@ function roleMeta(role) {
 
 function prepareTasks(items) {
   return items.map((item) => {
-    const role = item.role ?? 'Sin rol';
-    return { ...item, ...roleMeta(role), role, skill: item.skill ?? 'Sin skill', gate: item.gate ?? 'Sin gate', trace: [...(item.trace ?? item.evidence ?? [])], running: false };
+    const role = item.role ?? 'Implementer';
+    return { ...item, ...roleMeta(role), role, skill: item.skill ?? 'feature-implementer', gate: item.gate ?? 'Pendiente', trace: [...(item.trace ?? item.evidence ?? [])], running: false };
   });
 }
 
@@ -62,7 +62,11 @@ function statusFor(task) {
 }
 function liveTasks() { return tasks.filter((task) => !task.blocked && !['pending', 'review', 'done'].includes(task.state)); }
 function totalWaveTasks() { return tasks.filter((task) => !task.blocked).length; }
-function taskIsRunnable(task) { return !task.blocked && !['review', 'done'].includes(task.state) && !task.running; }
+function unmetDependencies(task) {
+  const byId = new Map(tasks.map((candidate) => [candidate.id, candidate]));
+  return (task.dependsOn ?? []).filter((id) => byId.get(id)?.state !== 'done');
+}
+function taskIsRunnable(task) { return !task.blocked && !['review', 'done'].includes(task.state) && !task.running && unmetDependencies(task).length === 0; }
 function engineCanRun() { return engineSelect.value === 'mock' || Boolean(currentProject?.files.tasks); }
 function executable(task) { return taskIsRunnable(task) && engineCanRun(); }
 function hasRunningTasks() { return tasks.some((task) => task.running) || activeRuns.size > 0; }
@@ -144,11 +148,13 @@ function renderTask(task) {
   card.querySelector('.issue').textContent = task.id;
   card.querySelector('.card-alert').textContent = task.blocked ? 'Bloqueada' : task.running ? 'Ejecutando' : '';
   card.querySelector('h3').textContent = task.title;
-  card.querySelector('.skill').textContent = task.skill;
-  card.querySelector('.gate').textContent = task.gate;
+  card.querySelector('.meta-label').textContent = task.area ? 'Área' : 'Skill';
+  card.querySelector('.skill').textContent = task.area ?? task.skill;
+  const unmet = unmetDependencies(task);
+  card.querySelector('.gate').textContent = unmet.length ? `Espera: ${unmet.join(', ')}` : task.gate;
   const gateIcon = card.querySelector('.gate-icon');
-  gateIcon.textContent = task.blocked ? '!' : '✓';
-  gateIcon.classList.toggle('gate-blocked', Boolean(task.blocked));
+  gateIcon.textContent = task.blocked ? '!' : unmet.length ? '·' : '✓';
+  gateIcon.classList.toggle('gate-blocked', Boolean(task.blocked) || unmet.length > 0);
   card.querySelector('.owner').textContent = task.role;
   const avatar = card.querySelector('.avatar');
   avatar.textContent = task.avatar;
@@ -185,25 +191,38 @@ function renderDetail() {
   content.innerHTML = '';
   const trace = document.createElement('div');
   trace.className = 'trace';
+  if (task.objective) addDetail(trace, 'Objetivo', task.objective);
+  if (task.area) addDetail(trace, 'Área', task.area);
   addDetail(trace, 'Responsable', task.role);
   addDetail(trace, 'Skill', task.skill);
+  if (task.dependsOn?.length) addDetail(trace, 'Depende de', task.dependsOn.join(', '));
+  const unmet = unmetDependencies(task);
+  if (unmet.length) addDetail(trace, 'Pendientes', unmet.join(', '), 'blocker-detail');
   if (task.blocked) addDetail(trace, 'Condición', [task.blocked.reason, task.blocked.resolution].filter(Boolean).join(' · '), 'blocker-detail');
   addDetail(trace, 'Gate actual', task.gate);
+  if (task.criteria?.length) addDetail(trace, 'Verificación', task.criteria.join(' · '));
   const label = document.createElement('div');
   label.className = 'trace-label';
   label.textContent = 'Evidencia';
   const list = document.createElement('ul');
   list.className = 'evidence-list';
-  for (const item of task.trace) {
+  const visibleTrace = task.trace.slice(-6);
+  for (const item of visibleTrace) {
     const row = document.createElement('li');
     const mark = document.createElement('b');
     mark.textContent = task.blocked ? '!' : '✓';
     row.append(mark, item);
     list.append(row);
   }
+  if (task.trace.length > visibleTrace.length) {
+    const row = document.createElement('li');
+    row.className = 'more-evidence';
+    row.textContent = `+ ${task.trace.length - visibleTrace.length} evidencias anteriores`;
+    list.prepend(row);
+  }
   trace.append(label, list);
   content.append(trace);
-  if (task.state === 'review') {
+  if (task.state === 'review' && !currentProject) {
     const button = document.createElement('button');
     button.className = 'button button-primary integrate-button';
     button.textContent = '✓ Marcar como integrada';
@@ -224,8 +243,10 @@ function updateSummary() {
   const done = canRun ? tasks.filter((task) => task.state === 'done').length : 0;
   const blocked = canRun ? tasks.filter((task) => task.blocked).length : 0;
   const total = canRun ? totalWaveTasks() : 0;
+  document.querySelector('#pendingCount').textContent = canRun ? tasks.filter((task) => task.state === 'pending').length : 0;
   document.querySelector('#activeCount').textContent = canRun ? liveTasks().length : 0;
   document.querySelector('#reviewCount').textContent = review;
+  document.querySelector('#doneCount').textContent = done;
   document.querySelector('#blockerCount').textContent = blocked;
   document.querySelector('#progressBar').style.width = total ? `${Math.round(((review + done) / total) * 100)}%` : '0%';
   document.querySelector('#progressText').textContent = total ? `${review + done}/${total} en revisión o terminadas` : 'Sin tareas cargadas';
@@ -237,7 +258,8 @@ function updateSummary() {
     document.querySelector('#timerText').textContent = currentProject ? 'Falta feature_list.json' : 'Selecciona un proyecto';
   } else if (!running && !hasRunningTasks()) {
     const remaining = tasks.filter((task) => !task.blocked && !['review', 'done'].includes(task.state)).length;
-    document.querySelector('#runLabel').textContent = done ? 'Integración humana registrada' : remaining ? 'Oleada preparada' : 'Esperando revisión humana';
+    const ready = tasks.filter(taskIsRunnable).length;
+    document.querySelector('#runLabel').textContent = remaining ? `${ready} ${ready === 1 ? 'slice listo' : 'slices listos'}` : review ? 'Esperando revisión humana' : 'Todo terminado';
     document.querySelector('#timerText').textContent = 'Se detiene antes del merge';
   } else if (paused) {
     document.querySelector('#runLabel').textContent = 'Oleada pausada';
@@ -449,7 +471,7 @@ function applyProject(project) {
   projectMessage.textContent = !project.files.tasks
     ? 'Este proyecto no está preparado para Harness: falta feature_list.json.'
     : tasks.length
-      ? `${tasks.length} tareas cargadas desde feature_list.json${project.files.config ? ' · configuración cargada' : ''}.`
+      ? `${tasks.length} tareas cargadas · ${tasks.filter((task) => task.state === 'done').length} terminadas · ${tasks.filter(taskIsRunnable).length} listas para ejecutar.`
       : 'Este proyecto no está preparado para arrancar: feature_list.json no contiene tareas.';
   resetCurrent();
   if (project.config?.defaultEngine === 'pi' && !engineSelect.querySelector('option[value="pi"]').disabled) engineSelect.value = 'pi';

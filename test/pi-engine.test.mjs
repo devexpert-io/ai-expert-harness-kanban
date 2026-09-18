@@ -4,13 +4,14 @@ import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import { buildPiPrompt, mapPiEvent, runPiTask } from '../harness/pi-engine.mjs';
 
-const task = { id: 'EX-1', title: 'Ejemplo', objective: 'Implementar ejemplo', role: 'Implementer', skill: 'feature-implementer' };
+const task = { id: 'EX-1', title: 'Ejemplo', objective: 'Implementar ejemplo', role: 'Implementer', skill: 'feature-implementer', criteria: ['La prueba enfocada pasa.'] };
 
 test('el prompt de Pi conserva límites operativos', () => {
   const prompt = buildPiPrompt(task);
   assert.match(prompt, /EX-1/);
   assert.match(prompt, /No hagas merge, push, deploy/);
   assert.match(prompt, /feature-implementer/);
+  assert.match(prompt, /La prueba enfocada pasa/);
 });
 
 test('los eventos RPC se traducen a estado y evidencia', () => {

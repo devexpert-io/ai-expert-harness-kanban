@@ -2,10 +2,14 @@ import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 
 export function buildPiPrompt(task) {
+  const criteria = task.criteria?.length
+    ? ['Criterios de verificación:', ...task.criteria.map((item) => `- ${item}`)]
+    : [];
   return [
     `Ejecuta el slice ${task.id}: ${task.title}.`,
     `Objetivo: ${task.objective}`,
     `Rol principal: ${task.role}. Skill de referencia: ${task.skill}.`,
+    ...criteria,
     'Trabaja únicamente dentro del repositorio actual y mantén el cambio acotado.',
     'Inspecciona primero, implementa, ejecuta verificaciones enfocadas y deja evidencia reproducible.',
     'No hagas merge, push, deploy, cambios de credenciales ni operaciones de producción.',
