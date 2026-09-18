@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node server.mjs",
     "check": "node --check app.js && node --check server.mjs && node --test",
-    "check:pi": "node scripts/check-pi-rpc.mjs"
+    "check:pi": "node scripts/check-pi-rpc.mjs",
+    "check:pi:e2e": "node scripts/check-pi-execution.mjs"
   }
 }

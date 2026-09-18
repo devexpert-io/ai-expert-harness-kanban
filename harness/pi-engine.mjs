@@ -33,6 +33,9 @@ export function mapPiEvent(event, task) {
   if (event.type === 'extension_error') {
     return { stage: 'implementing', role: task.role, skill: task.skill, gate: 'Error de extensión', evidence: `Pi · ${event.error ?? 'error de extensión'}`, level: 'error' };
   }
+  if (event.type === 'message_end' && event.message?.role === 'assistant' && event.message.stopReason === 'error') {
+    return { stage: 'implementing', role: task.role, skill: task.skill, gate: 'Pi no pudo ejecutar la tarea', evidence: `Pi · ${event.message.errorMessage ?? 'error del proveedor'}`, level: 'error' };
+  }
   return null;
 }
 
@@ -64,6 +67,7 @@ export async function runPiTask({ task, cwd, emit, signal, piBin = 'pi', provide
     let settled = false;
     let assistantText = '';
     let stderr = '';
+    let agentError = null;
     const finish = (error) => {
       if (settled) return;
       settled = true;
@@ -89,7 +93,11 @@ export async function runPiTask({ task, cwd, emit, signal, piBin = 'pi', provide
       if (event.type === 'response' && event.command === 'prompt' && event.success === false) {
         finish(new Error(event.error ?? 'Pi rechazó el prompt'));
       }
+      if (event.type === 'message_end' && event.message?.role === 'assistant' && event.message.stopReason === 'error') {
+        agentError = new Error(event.message.errorMessage ?? 'Pi no pudo completar la tarea');
+      }
       if (event.type === 'agent_settled') {
+        if (agentError) return finish(agentError);
         const summary = assistantText.trim().replace(/\s+/g, ' ').slice(0, 220);
         emit({ stage: 'validating', role: 'Validator', skill: 'feature-validator', gate: 'Ejecución Pi finalizada', evidence: summary ? `Pi · ${summary}` : 'Pi · ejecución finalizada' });
         emit({ stage: 'review', role: 'Validator', skill: 'feature-validator', gate: 'Revisión humana requerida', evidence: 'Pi · STOP antes de merge, push o deploy' });

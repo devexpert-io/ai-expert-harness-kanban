@@ -11,26 +11,30 @@
     <main class="app-shell">
       <header class="topbar">
         <div class="brand"><span class="brand-mark">H</span><strong>Harness</strong></div>
-        <span class="repo" id="projectName">Demo local</span>
         <div class="actions">
           <label class="engine-control">Motor
             <select id="engineSelect"><option value="mock">Mock</option><option value="pi">Pi</option></select>
           </label>
+          <span class="engine-status" id="engineStatus"></span>
           <button class="button button-quiet" id="resetButton">Reiniciar</button>
           <button class="button button-outline" id="pauseButton" disabled>⏸ Pausar</button>
           <button class="button button-primary" id="waveButton">▶ Iniciar oleada</button>
         </div>
       </header>
 
-      <details class="project-picker">
-        <summary><span id="projectSummary">Seleccionar proyecto</span> <span id="engineStatus"></span></summary>
-        <div class="project-controls">
-          <button class="button button-outline" type="button" id="projectButton">Elegir carpeta…</button>
-          <button class="button button-quiet" type="button" id="demoButton">Volver a la demo</button>
+      <section class="project-bar" aria-live="polite">
+        <div class="project-copy">
+          <div class="project-title"><span class="eyebrow">PROYECTO ACTIVO</span><span class="project-badge" id="projectBadge">Demo</span></div>
+          <strong id="projectName">Demo local</strong>
+          <code id="selectedFolder">Sin carpeta seleccionada</code>
+          <p id="projectMessage">La demo no accede a ningún proyecto.</p>
         </div>
-        <p class="selected-folder" id="selectedFolder">Ninguna carpeta seleccionada</p>
-        <p id="projectMessage">El selector nativo autoriza una carpeta; sólo se inspeccionan feature_list.json y .harness/config.json.</p>
-      </details>
+        <div class="project-controls">
+          <button class="button button-quiet" type="button" id="reloadButton" hidden>Recargar</button>
+          <button class="button button-outline" type="button" id="projectButton">Abrir proyecto…</button>
+          <button class="button button-quiet" type="button" id="demoButton" hidden>Usar demo</button>
+        </div>
+      </section>
 
       <section class="workspace-heading">
         <div>

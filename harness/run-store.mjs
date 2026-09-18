@@ -11,6 +11,13 @@ export class RunStore {
 
   get(id) { return this.#runs.get(id) ?? null; }
 
+  abort(id) {
+    const run = this.get(id);
+    if (!run || run.status !== 'running') return false;
+    run.controller.abort();
+    return true;
+  }
+
   emit(id, event) {
     const run = this.get(id);
     if (!run) return;

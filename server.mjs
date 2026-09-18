@@ -1,6 +1,6 @@
 import { createReadStream, statSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { dirname, extname, join, resolve } from 'node:path';
+import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { runMockTask } from './harness/mock-engine.mjs';
@@ -8,13 +8,14 @@ import { runPiTask } from './harness/pi-engine.mjs';
 import { RunStore } from './harness/run-store.mjs';
 import { getTaskDefinition } from './harness/task-catalog.mjs';
 import { chooseProject } from './harness/project-selector.mjs';
+import { ProjectSession } from './harness/project-session.mjs';
+import { inspectProject } from './harness/project-contract.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT ?? 4173);
 const piBin = process.env.PI_BIN ?? 'pi';
-const piMutationsAllowed = process.env.PI_ALLOW_MUTATIONS === 'true';
 const store = new RunStore();
-const selectedProjects = new Map();
+const projectSession = new ProjectSession();
 
 function detectPi() {
   const result = spawnSync(piBin, ['--version'], { encoding: 'utf8', timeout: 3_000 });
@@ -22,7 +23,7 @@ function detectPi() {
 }
 
 const piVersion = detectPi();
-const piEnabled = Boolean(piVersion && piMutationsAllowed);
+const piEnabled = Boolean(piVersion);
 
 function json(response, status, value) {
   response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -93,34 +94,49 @@ const server = createServer(async (request, response) => {
           installed: Boolean(piVersion),
           version: piVersion,
           enabled: piEnabled,
-          reason: piEnabled ? null : !piVersion ? 'Pi no está instalado' : 'Configura PI_ALLOW_MUTATIONS=true'
+          reason: piEnabled ? null : 'Pi no está instalado'
         }
       });
     }
+    if (request.method === 'GET' && url.pathname === '/api/project') {
+      return json(response, 200, { project: projectSession.get() });
+    }
+    if (request.method === 'DELETE' && url.pathname === '/api/project') {
+      projectSession.clear();
+      return json(response, 200, { cleared: true });
+    }
+    if (request.method === 'POST' && url.pathname === '/api/project/reload') {
+      const current = projectSession.get();
+      if (!current) return json(response, 409, { error: 'No hay ningún proyecto seleccionado' });
+      try {
+        const project = await projectSession.choose(async () => inspectProject(current.path));
+        return json(response, 200, project);
+      } catch {
+        return json(response, 500, { error: 'No se pudo volver a leer el proyecto' });
+      }
+    }
     if (request.method === 'POST' && url.pathname === '/api/projects/select') {
       let project;
-      try { project = await chooseProject(); }
+      try { project = await projectSession.choose(chooseProject); }
       catch { return json(response, 500, { error: 'No se pudo abrir o leer la carpeta seleccionada' }); }
       if (!project) return json(response, 200, { cancelled: true });
-      selectedProjects.set(project.path, project);
       return json(response, 200, project);
     }
     if (request.method === 'POST' && url.pathname === '/api/runs') {
       const body = await readJson(request);
-      const project = body.projectPath ? selectedProjects.get(resolve(body.projectPath)) : null;
-      if (body.projectPath && !project) return json(response, 409, { error: 'Selecciona e inspecciona el proyecto antes de ejecutar tareas' });
+      const project = projectSession.get();
       const projectTask = project?.tasks.find((candidate) => candidate.id === body.taskId);
       const task = projectTask ? {
         ...projectTask,
         role: projectTask.role ?? 'Implementer',
         skill: projectTask.skill ?? 'feature-implementer',
         objective: `Completa ${projectTask.title}. Gate esperado: ${projectTask.gate ?? 'evidencia reproducible'}.`
-      } : getTaskDefinition(body.taskId);
+      } : project ? null : getTaskDefinition(body.taskId);
       const engine = body.engine === 'pi' ? 'pi' : 'mock';
       if (!task) return json(response, 404, { error: 'Tarea no ejecutable' });
       if (task.blocked) return json(response, 409, { error: `Tarea bloqueada: ${task.blocked.reason}` });
       if (engine === 'pi' && !project) return json(response, 409, { error: 'Pi requiere un proyecto seleccionado explícitamente' });
-      if (engine === 'pi' && !piEnabled) return json(response, 409, { error: `Pi no disponible: ${!piVersion ? 'no instalado' : 'falta PI_ALLOW_MUTATIONS=true'}` });
+      if (engine === 'pi' && !piEnabled) return json(response, 409, { error: 'Pi no está instalado' });
       const run = store.create({ taskId: task.id, engine, projectPath: project?.path ?? null });
       queueMicrotask(() => execute(run, task, project?.path));
       return json(response, 202, { runId: run.id, taskId: run.taskId, engine: run.engine });
@@ -130,6 +146,11 @@ const server = createServer(async (request, response) => {
       const run = store.get(eventMatch[1]);
       if (!run) return json(response, 404, { error: 'Ejecución no encontrada' });
       return serveEvents(request, response, run);
+    }
+    const runMatch = url.pathname.match(/^\/api\/runs\/([^/]+)$/);
+    if (request.method === 'DELETE' && runMatch) {
+      const aborted = store.abort(runMatch[1]);
+      return json(response, aborted ? 202 : 409, { aborted });
     }
     const fileName = publicFiles.get(url.pathname);
     if (request.method === 'GET' && fileName) {

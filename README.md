@@ -7,12 +7,14 @@ Kanban local para ejecutar slices independientes con un motor mock o con Pi, con
 No necesita instalar dependencias:
 
 ```bash
-pnpm dev
+~/.local/bin/oprun pnpm dev
 # http://localhost:4173
 ```
 
 ```bash
 pnpm check
+pnpm check:pi
+~/.local/bin/oprun pnpm check:pi:e2e
 ```
 
 ## Motores
@@ -25,13 +27,9 @@ Es el modo predeterminado. Usa eventos deterministas, no accede a ningún reposi
 
 El servidor integra la CLI instalada mediante su protocolo RPC JSONL (`pi --mode rpc --no-session`). Traduce `agent_start`, eventos de herramientas y `agent_settled` a estados, rol, skill, gate y evidencia visibles en el Kanban.
 
-Pi está deshabilitado por defecto. Para permitir una ejecución real:
+Pi aparece disponible cuando la CLI está instalada. La carpeta objetivo se debe seleccionar explícitamente con el diálogo nativo de macOS antes de ejecutar. Pi hereda su configuración y credenciales locales; opcionalmente admite `PI_BIN`, `PI_PROVIDER`, `PI_MODEL` y `PI_TIMEOUT_MS`. El servidor no almacena ni muestra secretos.
 
-```bash
-PI_ALLOW_MUTATIONS=true pnpm dev
-```
-
-La carpeta objetivo se debe seleccionar explícitamente con el diálogo nativo de macOS antes de ejecutar. Pi hereda su configuración y credenciales locales; opcionalmente admite `PI_BIN`, `PI_PROVIDER`, `PI_MODEL` y `PI_TIMEOUT_MS`. El servidor no almacena ni muestra secretos.
+El servidor debe arrancarse mediante `oprun` para que Pi herede las credenciales de Agent Runtime. `check:pi` valida el protocolo local sin consumir una ejecución; `check:pi:e2e` realiza una ejecución real en una carpeta temporal, verifica el artefacto y la envía a la papelera.
 
 Cada prompt impone límites explícitos: trabajar sólo en el proyecto seleccionado y no hacer merge, push, deploy, cambios de credenciales ni operaciones de producción. La aplicación no integra GitHub y nunca fusiona PRs automáticamente.
 
@@ -75,7 +73,7 @@ Estados válidos: `pending`, `planning`, `implementing`, `validating`, `review` 
 }
 ```
 
-Los archivos ausentes producen un estado vacío explicativo; no se generan tareas ni valores ficticios. El ejemplo comprobable está en `examples/sample-project/`.
+Los archivos ausentes producen un estado explícito de “proyecto no preparado”; no se generan tareas ni valores ficticios. El proyecto seleccionado se conserva mientras el servidor siga activo y puede recargarse sin volver a autorizar la carpeta. El ejemplo comprobable está en `examples/sample-project/`.
 
 ## Límites actuales
 

@@ -18,7 +18,7 @@ function finish(error, state) {
     process.exitCode = 1;
     return;
   }
-  console.log(`Pi RPC OK · modelo ${state.model?.id ?? 'sin configurar'} · streaming ${state.isStreaming}`);
+  console.log(`Pi RPC disponible · modelo ${state.model?.id ?? 'sin configurar'} · streaming ${state.isStreaming}`);
 }
 
 function consume() {

@@ -37,10 +37,11 @@ const engineStatus = document.querySelector('#engineStatus');
 const projectName = document.querySelector('#projectName');
 const contextLabel = document.querySelector('#contextLabel');
 const projectButton = document.querySelector('#projectButton');
-const projectSummary = document.querySelector('#projectSummary');
+const projectBadge = document.querySelector('#projectBadge');
 const selectedFolder = document.querySelector('#selectedFolder');
 const projectMessage = document.querySelector('#projectMessage');
 const demoButton = document.querySelector('#demoButton');
+const reloadButton = document.querySelector('#reloadButton');
 const evidencePanel = document.querySelector('.evidence-panel');
 
 function roleMeta(role) {
@@ -61,14 +62,46 @@ function statusFor(task) {
 }
 function liveTasks() { return tasks.filter((task) => !task.blocked && !['pending', 'review', 'done'].includes(task.state)); }
 function totalWaveTasks() { return tasks.filter((task) => !task.blocked).length; }
-function executable(task) { return !task.blocked && !['review', 'done'].includes(task.state) && !task.running; }
+function taskIsRunnable(task) { return !task.blocked && !['review', 'done'].includes(task.state) && !task.running; }
+function engineCanRun() { return engineSelect.value === 'mock' || Boolean(currentProject?.files.tasks); }
+function executable(task) { return taskIsRunnable(task) && engineCanRun(); }
+function hasRunningTasks() { return tasks.some((task) => task.running) || activeRuns.size > 0; }
+
+function finishExecutionIfIdle() {
+  if (hasRunningTasks()) return;
+  running = false;
+  resetButton.disabled = false;
+  waveButton.classList.remove('running');
+  waveButton.textContent = '▶ Iniciar oleada';
+}
+
+function renderEmptyState() {
+  emptyState.innerHTML = '';
+  const title = document.createElement('h2');
+  const message = document.createElement('p');
+  const path = document.createElement('code');
+  const piNeedsProject = engineSelect.value === 'pi' && !currentProject;
+  title.textContent = piNeedsProject
+    ? 'Selecciona un proyecto para usar Pi'
+    : currentProject ? 'Este proyecto no está preparado para Harness' : 'No hay tareas cargadas';
+  message.textContent = piNeedsProject
+    ? 'Pi sólo puede ejecutar tareas de una carpeta autorizada que contenga feature_list.json.'
+    : currentProject
+      ? currentProject.files.tasks
+        ? 'feature_list.json no contiene tareas. No se ha inventado ni cargado ninguna.'
+        : 'Falta feature_list.json con el contrato de tareas. No se ha inventado ni cargado ninguna tarea.'
+      : 'Abre un proyecto preparado o vuelve a la demo.';
+  path.textContent = currentProject?.path ?? '';
+  emptyState.append(title, message);
+  if (currentProject) emptyState.append(path);
+}
 
 function renderBoard() {
-  const hasTasks = tasks.length > 0;
+  const hasTasks = tasks.length > 0 && engineCanRun();
   board.hidden = !hasTasks;
   emptyState.hidden = hasTasks;
   if (!hasTasks) {
-    emptyState.textContent = currentProject?.emptyReason ?? 'Este proyecto no aporta tareas al Kanban.';
+    renderEmptyState();
     board.innerHTML = '';
     return;
   }
@@ -141,8 +174,8 @@ function addDetail(container, label, value, className = '') {
 
 function renderDetail() {
   const task = tasks.find((item) => item.id === selectedId);
-  evidencePanel.hidden = !task;
-  if (!task) return;
+  evidencePanel.hidden = !task || !engineCanRun();
+  if (!task || !engineCanRun()) return;
   const status = statusFor(task);
   document.querySelector('#detailTitle').textContent = `${task.id} · ${task.title}`;
   const detailState = document.querySelector('#detailState');
@@ -186,19 +219,23 @@ function selectTask(id) {
 }
 
 function updateSummary() {
-  const review = tasks.filter((task) => task.state === 'review').length;
-  const done = tasks.filter((task) => task.state === 'done').length;
-  const blocked = tasks.filter((task) => task.blocked).length;
-  const total = totalWaveTasks();
-  document.querySelector('#activeCount').textContent = liveTasks().length;
+  const canRun = engineCanRun();
+  const review = canRun ? tasks.filter((task) => task.state === 'review').length : 0;
+  const done = canRun ? tasks.filter((task) => task.state === 'done').length : 0;
+  const blocked = canRun ? tasks.filter((task) => task.blocked).length : 0;
+  const total = canRun ? totalWaveTasks() : 0;
+  document.querySelector('#activeCount').textContent = canRun ? liveTasks().length : 0;
   document.querySelector('#reviewCount').textContent = review;
   document.querySelector('#blockerCount').textContent = blocked;
   document.querySelector('#progressBar').style.width = total ? `${Math.round(((review + done) / total) * 100)}%` : '0%';
   document.querySelector('#progressText').textContent = total ? `${review + done}/${total} en revisión o terminadas` : 'Sin tareas cargadas';
-  if (!tasks.length) {
-    document.querySelector('#runLabel').textContent = 'Proyecto sin contrato de tareas';
-    document.querySelector('#timerText').textContent = 'Carga feature_list.json';
-  } else if (!running) {
+  if (engineSelect.value === 'pi' && !currentProject) {
+    document.querySelector('#runLabel').textContent = 'Pi necesita un proyecto preparado';
+    document.querySelector('#timerText').textContent = 'Selecciona una carpeta con feature_list.json';
+  } else if (!tasks.length) {
+    document.querySelector('#runLabel').textContent = currentProject ? 'Proyecto no preparado para Harness' : 'Sin tareas cargadas';
+    document.querySelector('#timerText').textContent = currentProject ? 'Falta feature_list.json' : 'Selecciona un proyecto';
+  } else if (!running && !hasRunningTasks()) {
     const remaining = tasks.filter((task) => !task.blocked && !['review', 'done'].includes(task.state)).length;
     document.querySelector('#runLabel').textContent = done ? 'Integración humana registrada' : remaining ? 'Oleada preparada' : 'Esperando revisión humana';
     document.querySelector('#timerText').textContent = 'Se detiene antes del merge';
@@ -206,8 +243,20 @@ function updateSummary() {
     document.querySelector('#runLabel').textContent = 'Oleada pausada';
     document.querySelector('#timerText').textContent = 'Ejecución retenida';
   } else {
-    document.querySelector('#runLabel').textContent = `Oleada en ejecución · ${engineSelect.value}`;
+    document.querySelector('#runLabel').textContent = `${running ? 'Oleada' : 'Tarea'} en ejecución · ${engineSelect.value}`;
     document.querySelector('#timerText').textContent = ticks ? `Paso ${ticks}` : 'Pi conectado';
+  }
+  const executionActive = running || hasRunningTasks();
+  const runnable = tasks.some(executable);
+  waveButton.disabled = executionActive || !runnable;
+  projectButton.disabled = executionActive;
+  demoButton.disabled = executionActive;
+  reloadButton.disabled = executionActive;
+  engineSelect.disabled = executionActive;
+  resetButton.disabled = executionActive || !canRun || !tasks.length;
+  if (engineSelect.value === 'pi') {
+    pauseButton.disabled = !executionActive;
+    pauseButton.textContent = executionActive ? '■ Detener' : '⏸ Pausar';
   }
 }
 
@@ -223,7 +272,7 @@ function promote(task) {
 function advanceWave() {
   if (!running || paused) return;
   ticks += 1;
-  tasks.filter((task) => executable(task)).forEach(promote);
+  tasks.filter((task) => taskIsRunnable(task)).forEach(promote);
   if (!liveTasks().length) {
     running = false;
     clearInterval(intervalId);
@@ -241,15 +290,16 @@ async function runTask(id) {
   if (!task || !executable(task)) return;
   const runEngine = engineSelect.value;
   task.running = true;
-  if (runEngine === 'pi') resetButton.disabled = true;
+  resetButton.disabled = true;
   task.trace.push(`Solicitud enviada al motor ${runEngine}`);
   renderBoard();
   renderDetail();
+  updateSummary();
   try {
     const response = await fetch('/api/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ taskId: id, engine: runEngine, projectPath: currentProject?.path ?? null })
+      body: JSON.stringify({ taskId: id, engine: runEngine })
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error ?? 'No se pudo iniciar la ejecución');
@@ -274,24 +324,19 @@ async function runTask(id) {
       }
       source.close();
       activeRuns.delete(payload.runId);
-      if (!activeRuns.size && runEngine === 'pi') {
-        running = false;
-        resetButton.disabled = false;
-        waveButton.classList.remove('running');
-        waveButton.textContent = '▶ Iniciar oleada';
-        waveButton.disabled = !tasks.some(executable);
-      }
+      finishExecutionIfIdle();
       renderBoard();
       renderDetail();
       updateSummary();
     });
   } catch (error) {
     task.running = false;
-    if (runEngine === 'pi') resetButton.disabled = false;
+    finishExecutionIfIdle();
     task.gate = 'No iniciada';
     task.trace.push(error.message);
     renderBoard();
     renderDetail();
+    updateSummary();
   }
 }
 
@@ -306,7 +351,7 @@ function startWave() {
   if (engineSelect.value === 'pi') {
     pauseButton.disabled = true;
     resetButton.disabled = true;
-    tasks.filter((task) => executable(task)).forEach((task) => runTask(task.id));
+    tasks.filter((task) => taskIsRunnable(task)).forEach((task) => runTask(task.id));
   } else {
     pauseButton.disabled = false;
     pauseButton.textContent = '⏸ Pausar';
@@ -317,10 +362,19 @@ function startWave() {
 }
 
 function togglePause() {
-  if (engineSelect.value !== 'mock') return;
+  if (engineSelect.value === 'pi') {
+    stopActiveRuns();
+    return;
+  }
   paused = !paused;
   pauseButton.textContent = paused ? '▶ Reanudar' : '⏸ Pausar';
   updateSummary();
+}
+
+async function stopActiveRuns() {
+  pauseButton.disabled = true;
+  pauseButton.textContent = 'Deteniendo…';
+  await Promise.all([...activeRuns.keys()].map((runId) => fetch(`/api/runs/${runId}`, { method: 'DELETE' })));
 }
 
 function integrateTask(id) {
@@ -354,25 +408,60 @@ function resetCurrent() {
   updateSummary();
 }
 
-function useDemo() {
+function showDemo() {
   currentProject = null;
+  engineSelect.value = 'mock';
   projectName.textContent = 'Demo local';
   contextLabel.textContent = 'WAVE-042 · DEMO LOCAL';
-  projectSummary.textContent = 'Seleccionar proyecto';
-  selectedFolder.textContent = 'Ninguna carpeta seleccionada';
-  projectButton.textContent = 'Elegir carpeta…';
-  projectMessage.textContent = 'Modo mock determinista; no accede a ningún proyecto.';
-  projectButton.closest('details').open = false;
+  selectedFolder.textContent = 'Sin carpeta seleccionada';
+  projectBadge.textContent = 'Demo';
+  projectBadge.className = 'project-badge';
+  projectButton.textContent = 'Abrir proyecto…';
+  projectMessage.textContent = 'La demo no accede a ningún proyecto.';
+  demoButton.hidden = true;
+  reloadButton.hidden = true;
   tasks = prepareTasks(demoTasks);
   sourceTasks = structuredClone(tasks);
   selectedId = 'DX-176';
   resetCurrent();
 }
 
+async function useDemo() {
+  const response = await fetch('/api/project', { method: 'DELETE' });
+  if (!response.ok) throw new Error('No se pudo cerrar el proyecto actual');
+  showDemo();
+}
+
+function applyProject(project) {
+  currentProject = project;
+  tasks = prepareTasks(project.tasks);
+  sourceTasks = structuredClone(tasks);
+  selectedId = tasks.find((task) => task.state === 'review')?.id ?? tasks[0]?.id ?? null;
+  const ready = project.files.tasks && tasks.length > 0;
+  projectName.textContent = project.name;
+  contextLabel.textContent = 'PROYECTO · LOCAL';
+  selectedFolder.textContent = project.path;
+  projectBadge.textContent = ready ? 'Preparado' : 'No preparado';
+  projectBadge.className = `project-badge ${ready ? 'ready' : 'not-ready'}`;
+  projectButton.textContent = 'Cambiar proyecto…';
+  demoButton.hidden = false;
+  reloadButton.hidden = false;
+  projectMessage.textContent = !project.files.tasks
+    ? 'Este proyecto no está preparado para Harness: falta feature_list.json.'
+    : tasks.length
+      ? `${tasks.length} tareas cargadas desde feature_list.json${project.files.config ? ' · configuración cargada' : ''}.`
+      : 'Este proyecto no está preparado para arrancar: feature_list.json no contiene tareas.';
+  resetCurrent();
+  if (project.config?.defaultEngine === 'pi' && !engineSelect.querySelector('option[value="pi"]').disabled) engineSelect.value = 'pi';
+  renderBoard();
+  renderDetail();
+  updateSummary();
+}
+
 async function selectProject() {
   projectButton.disabled = true;
   projectButton.textContent = 'Abriendo selector…';
-  projectMessage.textContent = 'Esperando la selección de una carpeta…';
+  projectMessage.textContent = 'Selecciona una carpeta en el diálogo de macOS…';
   const response = await fetch('/api/projects/select', { method: 'POST' });
   const project = await response.json();
   if (!response.ok) throw new Error(project.error ?? 'No se pudo abrir la carpeta');
@@ -380,22 +469,16 @@ async function selectProject() {
     projectMessage.textContent = currentProject ? 'Selección cancelada; se mantiene el proyecto actual.' : 'Selección cancelada; continúa la demo.';
     return;
   }
-  currentProject = project;
-  projectName.textContent = project.name;
-  contextLabel.textContent = 'PROYECTO · LOCAL';
-  projectSummary.textContent = `Proyecto: ${project.name}`;
-  selectedFolder.textContent = project.path;
-  projectMessage.textContent = [
-    project.files.tasks ? 'feature_list.json cargado' : 'feature_list.json ausente',
-    project.files.config ? '.harness/config.json cargado' : 'config opcional ausente'
-  ].join(' · ');
-  tasks = prepareTasks(project.tasks);
-  sourceTasks = structuredClone(tasks);
-  selectedId = tasks.find((task) => task.state === 'review')?.id ?? tasks[0]?.id ?? null;
-  resetCurrent();
-  projectButton.closest('details').open = false;
-  if (project.config?.defaultEngine === 'pi' && !engineSelect.options[1].disabled) engineSelect.value = 'pi';
-  projectButton.textContent = 'Cambiar carpeta…';
+  applyProject(project);
+}
+
+async function reloadProject() {
+  reloadButton.disabled = true;
+  projectMessage.textContent = 'Recargando el contrato del proyecto…';
+  const response = await fetch('/api/project/reload', { method: 'POST' });
+  const project = await response.json();
+  if (!response.ok) throw new Error(project.error ?? 'No se pudo recargar el proyecto');
+  applyProject(project);
 }
 
 async function loadEngineStatus() {
@@ -404,25 +487,48 @@ async function loadEngineStatus() {
     const status = await response.json();
     const piOption = engineSelect.querySelector('option[value="pi"]');
     piOption.disabled = !status.pi.enabled;
-    engineStatus.textContent = status.pi.enabled ? `Pi ${status.pi.version} disponible` : `Pi ${status.pi.version ?? ''} inactivo: ${status.pi.reason}`;
+    engineStatus.textContent = status.pi.enabled ? `Pi ${status.pi.version} instalado` : status.pi.reason;
   } catch {
     engineSelect.querySelector('option[value="pi"]').disabled = true;
     engineStatus.textContent = 'Backend no disponible; sólo demo local';
   }
 }
 
+async function restoreProject() {
+  const response = await fetch('/api/project');
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error ?? 'No se pudo recuperar el proyecto');
+  if (payload.project) applyProject(payload.project);
+  else showDemo();
+}
+
 projectButton.addEventListener('click', async () => {
   try { await selectProject(); } catch (error) { projectMessage.textContent = error.message; }
   finally {
     projectButton.disabled = false;
-    projectButton.textContent = currentProject ? 'Cambiar carpeta…' : 'Elegir carpeta…';
+    projectButton.textContent = currentProject ? 'Cambiar proyecto…' : 'Abrir proyecto…';
   }
 });
-demoButton.addEventListener('click', useDemo);
+demoButton.addEventListener('click', () => useDemo().catch((error) => { projectMessage.textContent = error.message; }));
+reloadButton.addEventListener('click', () => reloadProject().catch((error) => { projectMessage.textContent = error.message; reloadButton.disabled = false; }));
 waveButton.addEventListener('click', startWave);
 pauseButton.addEventListener('click', togglePause);
 resetButton.addEventListener('click', resetCurrent);
-engineSelect.addEventListener('change', () => { pauseButton.disabled = engineSelect.value !== 'mock' || !running; updateSummary(); });
+engineSelect.addEventListener('change', () => {
+  pauseButton.disabled = engineSelect.value !== 'mock' || !running;
+  if (engineSelect.value === 'pi' && !currentProject) projectMessage.textContent = 'Pi necesita un proyecto preparado. Abre una carpeta con feature_list.json.';
+  else if (!currentProject) projectMessage.textContent = 'La demo no accede a ningún proyecto.';
+  renderBoard();
+  renderDetail();
+  updateSummary();
+});
 
-useDemo();
-loadEngineStatus();
+async function init() {
+  await loadEngineStatus();
+  await restoreProject();
+}
+
+init().catch((error) => {
+  showDemo();
+  projectMessage.textContent = error.message;
+});
