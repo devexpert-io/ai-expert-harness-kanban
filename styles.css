@@ -28,6 +28,8 @@ button { font: inherit; cursor: pointer; }
 .brand-mark { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 7px; background: var(--orange); color: #25161c; font-weight: 900; }
 .repo { padding-left: 14px; border-left: 1px solid var(--line); color: var(--muted); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .actions { display: flex; gap: 8px; margin-left: auto; }
+.engine-control { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; }
+.engine-control select { border: 1px solid var(--line); border-radius: 6px; padding: 6px 23px 6px 8px; color: var(--text); background: #111522; font: inherit; }
 .button { border: 0; border-radius: 7px; padding: 8px 11px; color: var(--text); background: transparent; font-size: 11px; font-weight: 750; }
 .button:hover:not(:disabled) { background: #20263b; }
 .button:disabled { cursor: not-allowed; opacity: .35; }
@@ -36,6 +38,13 @@ button { font: inherit; cursor: pointer; }
 .button-primary.running { background: var(--yellow); }
 .button-outline { border: 1px solid var(--line); }
 .button-quiet { color: var(--muted); }
+.project-picker { margin: 12px 0 -10px; color: var(--muted); font-size: 10px; }
+.project-picker summary { width: fit-content; cursor: pointer; color: #9fa9c3; }
+.project-picker summary span { margin-left: 8px; color: #6f7b9d; }
+.project-picker form { display: flex; gap: 7px; max-width: 700px; margin-top: 10px; }
+.project-picker input { flex: 1; min-width: 220px; border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; color: var(--text); background: #101421; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; outline: 0; }
+.project-picker input:focus { border-color: #667396; }
+.project-picker p { margin: 7px 0 0; color: #687391; }
 
 .workspace-heading { display: flex; justify-content: space-between; align-items: end; gap: 24px; padding: 28px 0 20px; }
 .eyebrow { margin: 0 0 5px; color: #8996bd; font-size: 9px; font-weight: 850; letter-spacing: .14em; }
@@ -52,6 +61,7 @@ h1 { margin: 0; font-size: 28px; line-height: 1.1; letter-spacing: -.035em; }
 .progress-meta { display: flex; justify-content: space-between; margin-top: 7px; color: #727d9c; font-size: 10px; }
 
 .board-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: #0d101c; }
+.empty-state { padding: 44px 20px; color: var(--muted); text-align: center; }
 .board { display: grid; grid-template-columns: repeat(6, minmax(205px, 1fr)); min-width: 1240px; }
 .column { min-height: 430px; padding: 12px 10px 14px; border-right: 1px solid #242a40; }
 .column:last-child { border-right: 0; }
@@ -77,6 +87,10 @@ h1 { margin: 0; font-size: 28px; line-height: 1.1; letter-spacing: -.035em; }
 .gate-icon { color: var(--green); font-weight: 900; }
 .gate-icon.gate-blocked { color: var(--red); }
 .task-card footer { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 8px; border-top: 1px solid #272e45; color: #909bb8; font-size: 9px; }
+.card-controls { display: flex; align-items: center; gap: 7px; }
+.card-action { border: 0; padding: 2px 0; color: #d7b2a0; background: transparent; font-size: 9px; font-weight: 750; }
+.card-action:hover { color: var(--orange); }
+.card-action:disabled { display: none; }
 .avatar { display: inline-grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; color: #111522; font-size: 8px; font-weight: 900; vertical-align: middle; }
 .avatar-planner { background: var(--purple); }
 .avatar-builder { background: var(--orange); }
@@ -98,6 +112,7 @@ h1 { margin: 0; font-size: 28px; line-height: 1.1; letter-spacing: -.035em; }
 @media (max-width: 850px) {
   .app-shell { padding: 0 16px 24px; }
   .repo { display: none; }
+  .project-picker form { flex-wrap: wrap; }
   .workspace-heading { align-items: start; }
   .summary { gap: 10px; flex-direction: column; text-align: right; }
   .evidence-panel { grid-template-columns: 1fr; gap: 16px; }
@@ -108,7 +123,7 @@ h1 { margin: 0; font-size: 28px; line-height: 1.1; letter-spacing: -.035em; }
   .topbar { flex-wrap: wrap; height: auto; padding: 12px 0; }
   .brand { width: 100%; }
   .actions { width: 100%; }
-  .actions .button { flex: 1; }
+  .actions .button, .engine-control { flex: 1; }
   .workspace-heading { display: block; }
   .summary { flex-direction: row; margin-top: 18px; text-align: left; }
   .progress-meta { gap: 10px; }

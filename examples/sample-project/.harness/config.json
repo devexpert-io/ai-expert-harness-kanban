@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "defaultEngine": "mock",
+  "reviewRequired": true,
+  "autoMerge": false
+}

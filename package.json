@@ -4,7 +4,8 @@
   "private": true,
   "description": "Local deterministic Kanban demo for an agent harness.",
   "scripts": {
-    "dev": "python3 -m http.server 4173",
-    "check": "node --check app.js"
+    "dev": "node server.mjs",
+    "check": "node --check app.js && node --check server.mjs && node --test",
+    "check:pi": "node scripts/check-pi-rpc.mjs"
   }
 }

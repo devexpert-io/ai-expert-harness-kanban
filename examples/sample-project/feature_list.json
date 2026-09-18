@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "id": "EX-001",
+      "title": "Preparar endpoint de salud",
+      "state": "pending",
+      "role": "Implementer",
+      "skill": "feature-implementer",
+      "gate": "Contrato definido",
+      "evidence": ["Criterios cargados desde feature_list.json"]
+    },
+    {
+      "id": "EX-002",
+      "title": "Validar respuesta del catálogo",
+      "state": "validating",
+      "role": "Validator",
+      "skill": "feature-validator",
+      "gate": "Tests enfocados",
+      "evidence": ["Fixture local disponible", "Sin acceso a servicios externos"]
+    },
+    {
+      "id": "EX-003",
+      "title": "Confirmar criterio visual",
+      "state": "pending",
+      "role": "Planner",
+      "skill": "build-brief",
+      "gate": "Decisión pendiente",
+      "blocked": {
+        "reason": "Falta referencia visual",
+        "resolution": "Seleccionar una variante"
+      },
+      "evidence": []
+    }
+  ]
+}
