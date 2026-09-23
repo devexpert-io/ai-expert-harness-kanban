@@ -47,7 +47,7 @@ function readOptionalJson(path) {
     if (stat.size > maxFileBytes) throw new Error(`${path} supera ${maxFileBytes} bytes`);
     return JSON.parse(readFileSync(path, 'utf8'));
   } catch (error) {
-    if (error.code === 'ENOENT') return null;
+    if (error.code === 'ENOENT') return undefined;
     throw error;
   }
 }
@@ -75,8 +75,10 @@ function validateTask(task, index) {
   const sourceStatus = requiredText(task, 'status', index);
   const state = sourceStates.get(sourceStatus);
   if (!state) throw new Error(`feature_list[${index}].status no es válido: ${sourceStatus}`);
+  const id = requiredText(task, 'id', index);
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(id)) throw new Error(`feature_list[${index}].id debe ser un identificador seguro para archivos`);
   return {
-    id: requiredText(task, 'id', index),
+    id,
     title: requiredText(task, 'title', index),
     state,
     sourceStatus,
@@ -94,8 +96,8 @@ function validateTask(task, index) {
 }
 
 function validateConfig(document) {
-  if (!document) return null;
-  if (document.version !== 1 || typeof document !== 'object') {
+  if (document === undefined) return null;
+  if (!document || typeof document !== 'object' || document.version !== 1) {
     throw new Error('.harness/config.json debe usar version 1');
   }
   if (document.defaultEngine != null && !['mock', 'pi'].includes(document.defaultEngine)) {
@@ -122,7 +124,7 @@ export function inspectProject(explicitPath) {
   const taskDocument = readOptionalJson(taskFile);
   const configDocument = readOptionalJson(configFile);
 
-  if (taskDocument && !Array.isArray(taskDocument)) throw new Error('feature_list.json debe ser una lista JSON de features');
+  if (taskDocument !== undefined && !Array.isArray(taskDocument)) throw new Error('feature_list.json debe ser una lista JSON de features');
   const config = validateConfig(configDocument);
 
   const tasks = (taskDocument ?? []).map(validateTask);
@@ -131,6 +133,17 @@ export function inspectProject(explicitPath) {
   const ids = new Set(tasks.map((task) => task.id));
   const unknownDependency = tasks.flatMap((task) => task.dependsOn.map((id) => ({ task: task.id, id }))).find(({ id }) => !ids.has(id));
   if (unknownDependency) throw new Error(`${unknownDependency.task} depende de un ID desconocido: ${unknownDependency.id}`);
+  const visiting = new Set();
+  const visited = new Set();
+  const visit = (id) => {
+    if (visiting.has(id)) throw new Error(`Dependencia circular en ${id}`);
+    if (visited.has(id)) return;
+    visiting.add(id);
+    for (const dependency of tasks.find((task) => task.id === id).dependsOn) visit(dependency);
+    visiting.delete(id);
+    visited.add(id);
+  };
+  for (const task of tasks) visit(task.id);
 
   return {
     path: projectPath,

@@ -1,83 +1,90 @@
-# AI Expert Harness Kanban
+# AI Expert Harness
 
-Kanban local para ejecutar slices independientes con un motor mock o con Pi, conservar evidencia estructurada y detener siempre el flujo en revisión humana.
+Capa visual del `feature-flow` de AI Expert. Abre un proyecto, selecciona las features que faltan y sigue el trabajo real de planner → implementer → validator. Sin demo mezclada con ejecuciones reales.
 
-## Ejecutar
+## Arranque
 
-No necesita instalar dependencias:
+Node 22 o superior y Pi instalado. No necesita dependencias npm.
 
-```bash
+```sh
 ~/.local/bin/oprun pnpm dev
 # http://localhost:4173
 ```
 
-```bash
-pnpm check
-pnpm check:pi
-~/.local/bin/oprun pnpm check:pi:e2e
+`oprun` proporciona las credenciales al servidor y sus procesos Pi. La aplicación no lee ni guarda claves. Ver Pi instalado no implica tener crédito o autenticación válida: los errores del proveedor se muestran en la feature afectada.
+
+## Uso
+
+1. **Abrir proyecto…**: selecciona su raíz Git con el selector nativo de macOS. Verás el nombre, la ruta y las features cargadas.
+2. Marca las features pendientes. Si alguna depende de otra sin aceptar, selecciona también esa dependencia. No se ejecutan features no seleccionadas.
+3. **Ejecutar selección** confirma las modificaciones y commits locales. La cola respeta dependencias y WIP=1.
+4. Abre una tarjeta para ver el rol, skill, evidencia, correcciones, archivos y cómo probarlo.
+5. El validator puede aceptar, pedir correcciones o bloquear. Las correcciones vuelven al implementer y se validan otra vez (máximo tres reparaciones por intento).
+6. La aceptación independiente se guarda como `accepted` y genera un commit local. La tarjeta queda en **Revisión humana** hasta que la marques revisada. No hay push, deploy, creación de PR ni merge automático.
+
+**Pausar cola** deja terminar la feature actual. **Detener ejecución** interrumpe el rol y pausa la cola. **Continuar desde este paso** conserva la baseline y los resultados anteriores. **Quitar de la cola** no borra ni revierte archivos.
+
+## Fuente de verdad
+
+El repositorio debe incluir:
+
+```text
+feature_list.json
+AGENTS.md
+.codex/config.toml
+.codex/agents/{planner,implementer,validator}.toml
+.agents/skills/{feature-flow,feature-spec,feature-implementer,feature-validator}/SKILL.md
 ```
 
-## Motores
+Se leen los `config_file` declarados en `.codex/config.toml`, las instrucciones completas del rol, su modelo, su esfuerzo y la skill correspondiente. Las referencias de las skills permanecen accesibles al agente y se incluyen en la huella de configuración. No se modifica ni copia configuración dentro del proyecto abierto.
 
-### Mock
+El adaptador admite la estructura TOML de AI Expert: secciones `[agents.<rol>]`, strings simples y `developer_instructions` multiline. Rechaza configuraciones incompatibles en vez de inventar un rol. Cada rol usa una sesión Pi nueva, sin extensiones ni contexto global descubierto; recibe explícitamente las instrucciones y la skill del proyecto y la extensión de proveedor de este harness. Pi **no reproduce el sandbox de Codex**: ejecuta con los permisos del usuario. Usa solo repositorios de confianza y no edites en paralelo los archivos de la feature activa.
 
-Es el modo predeterminado. Usa eventos deterministas, no accede a ningún repositorio y mantiene la demo disponible aunque Pi o sus credenciales no estén configurados.
+El modelo de ejecución está fijado explícitamente en **DevExpert Inference → `chat`** para los tres roles (`harness/pi-config.mjs`). Se conservan sus instrucciones, skills y esfuerzo de razonamiento, sin modificar la configuración del proyecto objetivo. La UI muestra el modelo efectivo. Ni `PI_MODEL`, ni `PI_PROVIDER`, ni las credenciales presentes en el entorno cambian esa selección; no hay fallback a OpenAI u otro modelo.
 
-### Pi
+La extensión local `harness/devexpert-provider.mjs` registra el alias `chat` de `https://inference.devexpert.io/v1` y usa `$DEVEXPERT_API_KEY` proporcionada por `oprun`. No escribe configuración global de Pi ni almacena claves. Su metadata no estima costes del servicio. `PI_BIN` y `PI_TIMEOUT_MS` (30 minutos por rol por defecto) siguen disponibles.
 
-El servidor integra la CLI instalada mediante su protocolo RPC JSONL (`pi --mode rpc --no-session`). Traduce `agent_start`, eventos de herramientas y `agent_settled` a estados, rol, skill, gate y evidencia visibles en el Kanban.
+### Contrato único
 
-Pi aparece disponible cuando la CLI está instalada. La carpeta objetivo se debe seleccionar explícitamente con el diálogo nativo de macOS antes de ejecutar. Pi hereda su configuración y credenciales locales; opcionalmente admite `PI_BIN`, `PI_PROVIDER`, `PI_MODEL` y `PI_TIMEOUT_MS`. El servidor no almacena ni muestra secretos.
-
-El servidor debe arrancarse mediante `oprun` para que Pi herede las credenciales de Agent Runtime. `check:pi` valida el protocolo local sin consumir una ejecución; `check:pi:e2e` realiza una ejecución real en una carpeta temporal, verifica el artefacto y la envía a la papelera.
-
-Cada prompt impone límites explícitos: trabajar sólo en el proyecto seleccionado y no hacer merge, push, deploy, cambios de credenciales ni operaciones de producción. La aplicación no integra GitHub y nunca fusiona PRs automáticamente.
-
-## Contrato de proyecto
-
-La interfaz sólo inspecciona dos rutas convencionales dentro de la carpeta autorizada mediante el selector nativo:
-
-- `feature_list.json` — obligatorio para cargar tareas.
-- `.harness/config.json` — opcional para configuración del harness.
-
-`feature_list.json`:
+`feature_list.json` es una lista JSON directa con exactamente estos nueve campos:
 
 ```json
 [
   {
-    "id": "APP-001",
+    "id": "catalog-search",
     "area": "catalog",
-    "title": "Añadir búsqueda",
+    "title": "Buscar productos",
     "user_visible_behavior": "La persona encuentra productos por texto.",
-    "depends_on": ["APP-000"],
+    "depends_on": [],
     "status": "not_started",
-    "verification": ["La búsqueda devuelve coincidencias relevantes."],
+    "verification": ["Una búsqueda devuelve las coincidencias esperadas."],
     "evidence": [],
-    "notes": "Slice preparado para implementación."
+    "notes": "Pendiente de planificación."
   }
 ]
 ```
 
-Este es el único formato admitido: una lista JSON directa cuyos objetos contienen exactamente esos nueve campos. No se aceptan contenedores `{ "version": 1, "tasks": [...] }`, alias camelCase ni campos adicionales.
+No se aceptan contenedores, alias de campos, IDs que no sean seguros para archivos, dependencias inexistentes ni ciclos. El ciclo ejecutable usa `not_started` → `in_progress` → `passing` → `accepted`, y `blocked` para bloqueos. Las etiquetas históricas `planned`, `planning`, `implementing`, `validating`, `review` y `done` pueden visualizarse, pero solo `accepted` satisface una dependencia de ejecución.
 
-Estados válidos: `not_started`, `planned`, `planning`, `in_progress`, `implementing`, `passing`, `validating`, `review`, `accepted`, `done` y `blocked`. En estado `blocked`, `notes` describe la condición bloqueante.
+El antiguo `.harness/config.json` es opcional y solo se valida si existe; no selecciona un motor simulado ni puede desactivar la revisión humana. `examples/sample-project` muestra el contrato, no es un proyecto ejecutable con roles.
 
-`.harness/config.json`:
+## Persistencia y límites
 
-```json
-{
-  "version": 1,
-  "defaultEngine": "mock",
-  "reviewRequired": true,
-  "autoMerge": false
-}
+- Estado, cola, roles, evidencia y aceptación se guardan atómicamente en `.harness-data/state.json`, fuera del repositorio objetivo. `HARNESS_STATE_PATH` permite otra ubicación. No borres ese estado durante una ejecución.
+- Al reiniciar, las ejecuciones activas pasan a interrumpidas y la cola queda pausada. Pi se detiene si desaparece su proceso servidor. No se continúa trabajo sin acción explícita.
+- Una especificación existente sin prueba de actualidad se revisa con planner. Una feature `passing` con spec pasa a validación independiente.
+- Se conserva el trabajo previo ajeno. Si el inventario o `PROGRESS.md` ya tienen cambios, hay archivos staged, cambia HEAD/rama o el diff no se puede aislar, se bloquea el commit. No hay reset ni rollback automático.
+- Si falla un hook o la firma de commit, los archivos quedan disponibles para inspección; no se desactiva ese control automáticamente. Resuelve el problema antes de continuar.
+- El servidor escucha solo en loopback. Rechaza mutaciones desde otros orígenes. No expongas este servidor a Internet.
+
+## Verificación
+
+```sh
+pnpm check          # Fixtures Git desechables, sin proveedor ni producto real
+pnpm check:pi       # Protocolo RPC local, sin inferencia
+
+# Opt-in: consume una ejecución real. Copia skills/roles, no modifica el origen.
+HARNESS_SOURCE_PROJECT=/ruta/al/proyecto ~/.local/bin/oprun pnpm check:pi:e2e
 ```
 
-Los archivos ausentes producen un estado explícito de “proyecto no preparado”; no se generan tareas ni valores ficticios. El proyecto seleccionado se conserva mientras el servidor siga activo y puede recargarse sin volver a autorizar la carpeta. El ejemplo comprobable está en `examples/sample-project/`.
-
-## Límites actuales
-
-- El estado vive en memoria y se pierde al reiniciar el servidor.
-- El modo Pi ejecuta una sesión por tarea sobre la carpeta seleccionada; todavía no crea worktrees separados.
-- Pausar/reanudar se mantiene para la oleada mock. Una sesión Pi activa no se presenta como pausable.
-- GitHub, creación de PR y persistencia son fronteras separadas aún no conectadas.
+Las pruebas cubren roles reales del adaptador, ciclo de reparación, aceptación/commit, preservación de WIP, cola/dependencias, cancelación, persistencia, errores de proveedor y API HTTP. La prueba real usa una feature mínima en un repositorio temporal y conserva su ruta para inspección.

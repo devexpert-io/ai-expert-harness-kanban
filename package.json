@@ -2,10 +2,10 @@
   "name": "ai-expert-harness-kanban",
   "version": "0.1.0",
   "private": true,
-  "description": "Local deterministic Kanban demo for an agent harness.",
+  "description": "Visual feature-flow harness for AI Expert, powered by project skills and Pi roles.",
   "scripts": {
     "dev": "node server.mjs",
-    "check": "node --check app.js && node --check server.mjs && node --test",
+    "check": "node --check app.js && node --check server.mjs && node --test test/*.test.mjs",
     "check:pi": "node scripts/check-pi-rpc.mjs",
     "check:pi:e2e": "node scripts/check-pi-execution.mjs"
   }

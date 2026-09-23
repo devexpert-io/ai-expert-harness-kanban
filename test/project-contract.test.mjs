@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { inspectProject } from '../harness/project-contract.mjs';
+import { feature } from './fixtures.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -82,4 +83,18 @@ test('rechaza campos alternativos aunque expresen la misma información', () => 
     dependsOn: [], status: 'not_started', verification: [], evidence: [], notes: 'Usa dependsOn.'
   }]));
   assert.throws(() => inspectProject(projectPath), /campo no admitido: dependsOn/);
+});
+
+test('rechaza null, booleanos, números e IDs con rutas', () => {
+  const projectPath = mkdtempSync(join(tmpdir(), 'harness-invalid-'));
+  for (const value of [null, false, 0, [feature('../escape')]]) {
+    writeFileSync(join(projectPath, 'feature_list.json'), JSON.stringify(value));
+    assert.throws(() => inspectProject(projectPath), /lista JSON|identificador seguro/);
+  }
+});
+
+test('detecta dependencias circulares antes de crear una cola imposible', () => {
+  const projectPath = mkdtempSync(join(tmpdir(), 'harness-cycle-'));
+  writeFileSync(join(projectPath, 'feature_list.json'), JSON.stringify([feature('one', ['two']), feature('two', ['one'])]));
+  assert.throws(() => inspectProject(projectPath), /Dependencia circular/);
 });

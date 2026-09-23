@@ -1,174 +1,91 @@
 import { createReadStream, statSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { dirname, extname, join } from 'node:path';
+import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { runMockTask } from './harness/mock-engine.mjs';
-import { runPiTask } from './harness/pi-engine.mjs';
-import { RunStore } from './harness/run-store.mjs';
-import { getTaskDefinition } from './harness/task-catalog.mjs';
 import { chooseProject } from './harness/project-selector.mjs';
-import { ProjectSession } from './harness/project-session.mjs';
-import { inspectProject } from './harness/project-contract.mjs';
-import { taskReadiness } from './harness/task-readiness.mjs';
+import { StateStore } from './harness/state-store.mjs';
+import { FeatureQueue } from './harness/queue.mjs';
+import { acquireServerLock } from './harness/server-lock.mjs';
+import { piOptions as configuredPiOptions } from './harness/pi-config.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
-const port = Number(process.env.PORT ?? 4173);
-const piBin = process.env.PI_BIN ?? 'pi';
-const store = new RunStore();
-const projectSession = new ProjectSession();
-
-function detectPi() {
-  const result = spawnSync(piBin, ['--version'], { encoding: 'utf8', timeout: 3_000 });
-  return result.status === 0 ? result.stdout.trim() : null;
-}
-
-const piVersion = detectPi();
-const piEnabled = Boolean(piVersion);
-
-function json(response, status, value) {
+const publicFiles = new Map([['/', 'index.html'], ['/index.html', 'index.html'], ['/styles.css', 'styles.css'], ['/app.js', 'app.js']]);
+const mimeTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
+const json = (response, status, value) => {
   response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
   response.end(JSON.stringify(value));
-}
-
+};
 async function readJson(request) {
   let body = '';
   for await (const chunk of request) {
     body += chunk;
-    if (body.length > 16_384) throw new Error('Payload demasiado grande');
+    if (body.length > 16_384) throw new Error('Petición demasiado grande');
   }
   return body ? JSON.parse(body) : {};
 }
 
-async function execute(run, task, projectPath) {
-  try {
-    if (run.engine === 'mock') {
-      for await (const event of runMockTask({ signal: run.controller.signal })) store.emit(run.id, event);
-    } else {
-      await runPiTask({
-        task,
-        cwd: projectPath,
-        emit: (event) => store.emit(run.id, event),
-        signal: run.controller.signal,
-        piBin,
-        provider: process.env.PI_PROVIDER,
-        model: process.env.PI_MODEL,
-        timeoutMs: Number(process.env.PI_TIMEOUT_MS ?? 600_000)
-      });
-    }
-    store.complete(run.id);
-  } catch (error) {
-    store.complete(run.id, error);
+export function createHarnessServer({ statePath = process.env.HARNESS_STATE_PATH ?? join(root, '.harness-data/state.json'), select = chooseProject, executor, piVersion, piOptions = {} } = {}) {
+  const release = acquireServerLock(statePath);
+  const options = { ...configuredPiOptions(), ...piOptions };
+  if (piVersion === undefined) {
+    const detection = spawnSync(options.piBin, ['--version'], { encoding: 'utf8', timeout: 3_000 });
+    piVersion = detection.status === 0 ? detection.stdout.trim() : null;
   }
-}
-
-function serveEvents(request, response, run) {
-  response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
-  for (const event of run.events) response.write(`data: ${JSON.stringify(event)}\n\n`);
-  if (run.status !== 'running') {
-    response.write(`event: complete\ndata: ${JSON.stringify({ status: run.status, error: run.error })}\n\n`);
-    response.end();
-    return;
-  }
-  const unsubscribe = store.subscribe(run.id, (event, finalRun) => {
-    if (event) response.write(`data: ${JSON.stringify(event)}\n\n`);
-    else {
-      response.write(`event: complete\ndata: ${JSON.stringify({ status: finalRun.status, error: finalRun.error })}\n\n`);
-      response.end();
-    }
-  });
-  request.on('close', unsubscribe);
-}
-
-const publicFiles = new Map([
-  ['/', 'index.html'], ['/index.html', 'index.html'], ['/styles.css', 'styles.css'], ['/app.js', 'app.js'], ['/README.md', 'README.md']
-]);
-const mimeTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.md': 'text/markdown; charset=utf-8' };
-
-const server = createServer(async (request, response) => {
-  const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
-  try {
-    if (request.method === 'GET' && url.pathname === '/api/status') {
-      return json(response, 200, {
-        defaultEngine: 'mock',
-        pi: {
-          installed: Boolean(piVersion),
-          version: piVersion,
-          enabled: piEnabled,
-          reason: piEnabled ? null : 'Pi no está instalado'
-        }
-      });
-    }
-    if (request.method === 'GET' && url.pathname === '/api/project') {
-      return json(response, 200, { project: projectSession.get() });
-    }
-    if (request.method === 'DELETE' && url.pathname === '/api/project') {
-      projectSession.clear();
-      return json(response, 200, { cleared: true });
-    }
-    if (request.method === 'POST' && url.pathname === '/api/project/reload') {
-      const current = projectSession.get();
-      if (!current) return json(response, 409, { error: 'No hay ningún proyecto seleccionado' });
-      try {
-        const project = await projectSession.choose(async () => inspectProject(current.path));
-        return json(response, 200, project);
-      } catch (error) {
-        return json(response, 500, { error: `No se pudo recargar el proyecto: ${error.message}` });
+  let queue;
+  try { queue = new FeatureQueue({ store: new StateStore(statePath), executor, piVersion, piOptions: options }); }
+  catch (error) { release(); throw error; }
+  let selecting = false;
+  const server = createServer(async (request, response) => {
+    try {
+      const host = request.headers.host ?? '';
+      if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)) return json(response, 403, { error: 'Solo se permite acceso local' });
+      const url = new URL(request.url, `http://${host}`);
+      if (request.method !== 'GET') {
+        if (request.headers.origin && request.headers.origin !== `http://${host}`) return json(response, 403, { error: 'Origen no permitido' });
+        if (request.headers['content-type'] !== 'application/json') return json(response, 415, { error: 'Se requiere application/json' });
       }
-    }
-    if (request.method === 'POST' && url.pathname === '/api/projects/select') {
-      let project;
-      try { project = await projectSession.choose(chooseProject); }
-      catch (error) { return json(response, 500, { error: `La carpeta se abrió, pero su contrato no es válido: ${error.message}` }); }
-      if (!project) return json(response, 200, { cancelled: true });
-      return json(response, 200, project);
-    }
-    if (request.method === 'POST' && url.pathname === '/api/runs') {
-      const body = await readJson(request);
-      const project = projectSession.get();
-      const projectTask = project?.tasks.find((candidate) => candidate.id === body.taskId);
-      const task = projectTask ? {
-        ...projectTask,
-        role: projectTask.role ?? 'Implementer',
-        skill: projectTask.skill ?? 'feature-implementer',
-        objective: projectTask.objective ?? `Completa ${projectTask.title}. Gate esperado: ${projectTask.gate ?? 'evidencia reproducible'}.`
-      } : project ? null : getTaskDefinition(body.taskId);
-      const engine = body.engine === 'pi' ? 'pi' : 'mock';
-      if (!task) return json(response, 404, { error: 'Tarea no ejecutable' });
-      if (project) {
-        const readiness = taskReadiness(projectTask, project.tasks);
-        if (!readiness.ready) return json(response, 409, { error: readiness.reason });
-      } else if (task.blocked) return json(response, 409, { error: `Tarea bloqueada: ${task.blocked.reason}` });
-      if (engine === 'pi' && !project) return json(response, 409, { error: 'Pi requiere un proyecto seleccionado explícitamente' });
-      if (engine === 'pi' && !piEnabled) return json(response, 409, { error: 'Pi no está instalado' });
-      const run = store.create({ taskId: task.id, engine, projectPath: project?.path ?? null });
-      queueMicrotask(() => execute(run, task, project?.path));
-      return json(response, 202, { runId: run.id, taskId: run.taskId, engine: run.engine });
-    }
-    const eventMatch = url.pathname.match(/^\/api\/runs\/([^/]+)\/events$/);
-    if (request.method === 'GET' && eventMatch) {
-      const run = store.get(eventMatch[1]);
-      if (!run) return json(response, 404, { error: 'Ejecución no encontrada' });
-      return serveEvents(request, response, run);
-    }
-    const runMatch = url.pathname.match(/^\/api\/runs\/([^/]+)$/);
-    if (request.method === 'DELETE' && runMatch) {
-      const aborted = store.abort(runMatch[1]);
-      return json(response, aborted ? 202 : 409, { aborted });
-    }
-    const fileName = publicFiles.get(url.pathname);
-    if (request.method === 'GET' && fileName) {
-      const path = join(root, fileName);
-      const stat = statSync(path);
-      response.writeHead(200, { 'content-type': mimeTypes[extname(path)] ?? 'application/octet-stream', 'content-length': stat.size });
-      return createReadStream(path).pipe(response);
-    }
-    json(response, 404, { error: 'No encontrado' });
-  } catch (error) {
-    json(response, 500, { error: error.message });
-  }
-});
+      if (request.method === 'GET' && ['/api/state', '/api/status'].includes(url.pathname)) return json(response, 200, queue.snapshot());
+      if (request.method === 'POST' && url.pathname === '/api/projects/select') {
+        if (selecting) throw new Error('El selector de carpetas ya está abierto');
+        selecting = true;
+        try {
+          const project = await select();
+          if (project) queue.select(project);
+          return json(response, 200, { cancelled: !project, ...queue.snapshot() });
+        } finally { selecting = false; }
+      }
+      if (request.method === 'POST' && url.pathname === '/api/project/reload') return json(response, 200, queue.snapshot());
+      if (request.method === 'POST' && url.pathname === '/api/queue') {
+        const body = await readJson(request);
+        queue.enqueue(body.taskIds);
+        return json(response, 202, queue.snapshot());
+      }
+      if (request.method === 'POST' && url.pathname === '/api/queue/pause') { queue.pause(); return json(response, 200, queue.snapshot()); }
+      if (request.method === 'POST' && url.pathname === '/api/queue/resume') { queue.resume(); return json(response, 200, queue.snapshot()); }
+      const match = url.pathname.match(/^\/api\/runs\/([\w-]+)\/(stop|retry|discard|reviewed)$/);
+      if (request.method === 'POST' && match) { queue.action(match[1], match[2]); return json(response, 200, queue.snapshot()); }
+      const file = publicFiles.get(url.pathname);
+      if (request.method === 'GET' && file) {
+        const path = join(root, file);
+        response.writeHead(200, { 'content-type': mimeTypes[extname(path)], 'content-length': statSync(path).size, 'cache-control': 'no-store', 'content-security-policy': "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'" });
+        return createReadStream(path).pipe(response);
+      }
+      return json(response, 404, { error: 'No encontrado' });
+    } catch (error) { return json(response, 409, { error: error.message }); }
+  });
+  server.once('close', release);
+  server.once('error', release);
+  return { server, queue };
+}
 
-server.listen(port, () => {
-  console.log(`Harness en http://localhost:${port} · mock activo · Pi ${piEnabled ? `activo (${piVersion})` : `inactivo (${piVersion ?? 'no instalado'})`}`);
-});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const { server, queue } = createHarnessServer();
+  const port = Number(process.env.PORT ?? 4173);
+  server.listen(port, '127.0.0.1', () => console.log(`Harness en http://localhost:${port} · Pi · feature-flow · WIP 1`));
+  for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, async () => {
+    await queue.close();
+    server.close();
+    server.closeAllConnections();
+  });
+}

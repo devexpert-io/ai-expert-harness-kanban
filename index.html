@@ -1,84 +1,39 @@
 <!doctype html>
 <html lang="es">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0b0e18" />
-    <title>Harness · AI Expert</title>
-    <link rel="stylesheet" href="styles.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#11151b">
+    <title>AI Expert · Harness</title>
+    <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
-    <main class="app-shell">
+    <main>
       <header class="topbar">
-        <div class="brand"><span class="brand-mark">H</span><strong>Harness</strong></div>
-        <div class="actions">
-          <label class="engine-control">Motor
-            <select id="engineSelect"><option value="mock">Mock</option><option value="pi">Pi</option></select>
-          </label>
-          <span class="engine-status" id="engineStatus"></span>
-          <button class="button button-quiet" id="resetButton">Reiniciar</button>
-          <button class="button button-outline" id="pauseButton" disabled>⏸ Pausar</button>
-          <button class="button button-primary" id="waveButton">▶ Iniciar oleada</button>
-        </div>
+        <a class="brand" href="/">AI Expert <span>/ Harness</span></a>
+        <div class="toolbar"><span id="connection" role="status">Conectando…</span><button id="open">Abrir proyecto…</button></div>
       </header>
-
-      <section class="project-bar" aria-live="polite">
-        <div class="project-copy">
-          <div class="project-title"><span class="eyebrow">PROYECTO ACTIVO</span><span class="project-badge" id="projectBadge">Demo</span></div>
-          <strong id="projectName">Demo local</strong>
-          <code id="selectedFolder">Sin carpeta seleccionada</code>
-          <p id="projectMessage">La demo no accede a ningún proyecto.</p>
-        </div>
-        <div class="project-controls">
-          <button class="button button-quiet" type="button" id="reloadButton" hidden>Recargar</button>
-          <button class="button button-outline" type="button" id="projectButton">Abrir proyecto…</button>
-          <button class="button button-quiet" type="button" id="demoButton" hidden>Usar demo</button>
-        </div>
+      <section class="project-heading">
+        <div><p class="eyebrow">FEATURE FLOW</p><h1 id="project-name">Tus features, de principio a fin.</h1><p id="project-path" class="muted">Abre un repositorio para ver su backlog y ejecutar el harness de AI Expert.</p></div>
+        <button id="refresh" class="quiet" hidden>Actualizar</button>
       </section>
-
-      <section class="workspace-heading">
-        <div>
-          <p class="eyebrow" id="contextLabel">WAVE-042 · DEMO LOCAL</p>
-          <h1>Ejecución de tareas</h1>
-          <p class="run-status" id="runLabel">Oleada preparada</p>
+      <p id="error" class="notice error" role="alert" hidden></p>
+      <p id="message" class="notice" role="status" hidden></p>
+      <section id="workspace" hidden>
+        <div class="board-toolbar">
+          <div><strong id="queue-label"></strong><p class="muted" id="queue-help"></p></div>
+          <div class="toolbar"><button id="pause" hidden>Pausar cola</button><button id="execute" class="primary" disabled>Selecciona features</button></div>
         </div>
-        <div class="summary" aria-label="Resumen de la oleada">
-          <span><strong id="pendingCount">0</strong> pendientes</span>
-          <span><strong id="activeCount">0</strong> en curso</span>
-          <span><strong id="reviewCount">0</strong> en revisión</span>
-          <span><strong id="doneCount">0</strong> terminadas</span>
-          <span class="blocked-summary"><strong id="blockerCount">0</strong> bloqueada</span>
-        </div>
+        <div class="board-scroll"><section id="board" class="board" aria-label="Proceso de las features"></section></div>
+        <section id="detail" class="detail" aria-label="Detalle de la feature" hidden></section>
+        <details class="configuration"><summary>Harness del proyecto <span id="runtime-status"></span></summary><div id="runtime"></div></details>
       </section>
-
-      <section class="progress" aria-live="polite">
-        <div class="progress-track"><span id="progressBar"></span></div>
-        <div class="progress-meta"><span id="progressText"></span><span id="timerText">Se detiene antes del merge</span></div>
+      <section id="empty" class="empty">
+        <div class="empty-mark">→</div><h2>El proyecto es la fuente de verdad.</h2>
+        <p>Carga <code>feature_list.json</code>, selecciona las features pendientes y sigue su planificación, implementación y validación independiente.</p>
+        <p class="muted">Usa las skills y los subagentes del repositorio. Una feature cada vez. Se detiene para revisión humana.</p>
       </section>
-
-      <section class="board-wrap">
-        <div class="empty-state" id="emptyState" hidden></div>
-        <div class="board" id="board" aria-label="Tablero Kanban de tareas"></div>
-      </section>
-
-      <article class="evidence-panel">
-        <header class="evidence-heading">
-          <div><p class="eyebrow">EVIDENCIA</p><h2 id="detailTitle"></h2></div>
-          <span class="state-pill" id="detailState"></span>
-        </header>
-        <div id="detailContent"></div>
-      </article>
     </main>
-
-    <template id="taskTemplate">
-      <article class="task-card" tabindex="0">
-        <div class="card-top"><span class="issue"></span><span class="card-alert"></span></div>
-        <h3></h3>
-        <div class="skill-row"><span class="meta-label">Skill</span><b class="skill"></b></div>
-        <div class="gate-row"><span class="gate-icon">✓</span><span class="gate"></span></div>
-        <footer><span class="owner"></span><span class="card-controls"><button class="card-action" type="button">Ejecutar</button><span class="avatar"></span></span></footer>
-      </article>
-    </template>
-    <script src="app.js"></script>
+    <script src="/app.js"></script>
   </body>
 </html>
