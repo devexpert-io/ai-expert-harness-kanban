@@ -24,10 +24,16 @@ export function snapshot(cwd) {
 export function assertUnstaged(cwd) {
   if (git(cwd, 'diff', '--cached', '--name-only')) throw new Error('Hay cambios staged. Revísalos antes de ejecutar el harness; no se incluirán automáticamente');
 }
+function explain(action, message) {
+  try { return action(); } catch { throw new Error(message); }
+}
 export function startWorkspace(cwd) {
-  if (realpathSync(git(cwd, 'rev-parse', '--show-toplevel')) !== cwd) throw new Error('Selecciona la raíz del repositorio Git');
+  const top = explain(() => git(cwd, 'rev-parse', '--show-toplevel'), 'La carpeta no es un repositorio Git');
+  if (realpathSync(top) !== cwd) throw new Error('Selecciona la raíz del repositorio Git');
+  const head = explain(() => git(cwd, 'rev-parse', '--verify', 'HEAD'), 'El repositorio no tiene commits todavía; crea un commit inicial');
+  const branch = explain(() => git(cwd, 'symbolic-ref', '--short', 'HEAD'), 'HEAD está desacoplado; cambia a una rama antes de ejecutar');
   assertUnstaged(cwd);
-  const baseline = { head: git(cwd, 'rev-parse', 'HEAD'), branch: git(cwd, 'symbolic-ref', '--short', 'HEAD'), dirty: snapshot(cwd) };
+  const baseline = { head, branch, dirty: snapshot(cwd) };
   if (Object.keys(baseline.dirty).some((path) => ['feature_list.json', 'PROGRESS.md'].includes(path))) throw new Error('feature_list.json o PROGRESS.md tienen cambios previos. Revísalos antes de ejecutar para no mezclar trabajo');
   return baseline;
 }

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { git } from '../harness/git-workspace.mjs';
 import test from 'node:test';
 import { FeatureQueue } from '../harness/queue.mjs';
 import { StateStore } from '../harness/state-store.mjs';
@@ -23,7 +25,15 @@ test('una sola feature activa, orden de dependencias y selección explícita', a
   const { queue } = setup([feature('second', ['first']), feature('first'), feature('unselected')], executor);
   queue.enqueue(['second', 'first']);
   assert.throws(() => queue.enqueue(['first']), /ejecución pendiente/);
-  await until(() => queue.data.runs.every((run) => run.status === 'review'));
+  const first = () => queue.data.runs.find((run) => run.taskId === 'first');
+  const second = () => queue.data.runs.find((run) => run.taskId === 'second');
+  await until(() => first().status === 'review');
+  // A dependent never builds on an unreviewed commit; waiting is idle, not a blocked queue.
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(second().status, 'queued');
+  assert.equal(queue.data.paused, false);
+  queue.action(first().id, 'reviewed');
+  await until(() => second().status === 'review');
   assert.equal(maximum, 1);
   assert.deepEqual(calls, ['first:planner', 'first:implementer', 'first:validator', 'second:planner', 'second:implementer', 'second:validator']);
   assert.equal(queue.project().tasks.find((task) => task.id === 'unselected').sourceStatus, 'not_started');
@@ -111,4 +121,53 @@ test('estado running se restaura como interrumpido y exige continuar explícitam
   const restored = new StateStore(statePath);
   assert.equal(restored.data.runs[0].status, 'interrupted');
   assert.equal(restored.data.paused, true);
+});
+
+test('pedir cambios en revisión humana relanza implementer → validator y hace un commit de corrección', async () => {
+  const calls = [];
+  const { queue, cwd } = setup([feature('first'), feature('second', ['first'])], fakeExecutor({ calls }));
+  queue.enqueue(['first', 'second']);
+  await until(() => queue.data.runs[0].status === 'review');
+  assert.throws(() => queue.action(queue.data.runs[0].id, 'reject', { feedback: '  ' }), /Describe qué hay que cambiar/);
+  queue.action(queue.data.runs[0].id, 'reject', { feedback: 'Cambia el texto del botón' });
+  assert.equal(queue.data.runs[0].status, 'changes-requested');
+  const rework = () => queue.data.runs.find((run) => run.reopen);
+  await until(() => rework()?.status === 'review');
+  assert.deepEqual(calls.slice(3), ['first:implementer', 'first:validator']);
+  assert.equal(rework().steps[0].role, 'implementer');
+  assert.equal(queue.data.runs.find((run) => run.taskId === 'second').status, 'queued');
+  assert.match(git(cwd, 'log', '-1', '--format=%B'), /fix: address review of first/);
+  assert.match(readFileSync(join(cwd, 'src/first.js'), 'utf8'), /Cambia el texto del botón/);
+  assert.equal(queue.project().tasks.find((task) => task.id === 'first').sourceStatus, 'accepted');
+  queue.action(rework().id, 'reviewed');
+  await until(() => queue.data.runs.find((run) => run.taskId === 'second').status === 'review');
+});
+
+test('continuar una ejecución no deja estado a medias si otra sigue bloqueada', () => {
+  const { queue } = setup([feature('first'), feature('second')]);
+  queue.pause();
+  queue.enqueue(['first', 'second']);
+  for (const run of queue.data.runs) run.status = 'blocked';
+  assert.throws(() => queue.action(queue.data.runs[0].id, 'retry'), /bloqueada/);
+  assert.equal(queue.data.runs[0].status, 'blocked');
+});
+
+test('HTTP: content-type con charset, JSON inválido y rutas estáticas seguras', async (t) => {
+  const { server, queue } = createHarnessServer({ statePath: join(fixture(), 'state.json'), piVersion: 'fixture' });
+  server.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  t.after(async () => { await queue.close(); server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = (body, type = 'application/json; charset=utf-8') => fetch(`${base}/api/queue/pause`, { method: 'POST', headers: { 'content-type': type }, body });
+  assert.equal((await post('{}')).status, 200);
+  assert.equal((await post('{nope')).status, 400);
+  assert.equal((await post('{}', 'text/plain')).status, 415);
+  const first = await fetch(`${base}/api/state`);
+  const tag = first.headers.get('etag');
+  assert.ok(tag);
+  assert.equal((await fetch(`${base}/api/state`, { headers: { 'if-none-match': tag } })).status, 304);
+  assert.equal((await fetch(`${base}/`)).headers.get('content-type'), 'text/html; charset=utf-8');
+  assert.equal((await fetch(`${base}/ui/board.js`)).status, 200);
+  assert.equal((await fetch(`${base}/..%2Fserver.mjs`)).status, 404);
+  assert.equal((await fetch(`${base}/package.json`)).status, 404);
 });

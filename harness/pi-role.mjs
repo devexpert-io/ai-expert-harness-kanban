@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { roleStages } from './project-runtime.mjs';
 import { pinnedPi, providerExtension } from './pi-config.mjs';
 
-export function buildPiPrompt({ task, role, repairBrief, baseline, files = [] }) {
+export function buildPiPrompt({ task, role, repairBrief, humanFeedback, baseline, files = [] }) {
   const schema = role.name === 'validator'
     ? '{"verdict":"accept|revise|block","summary":"...","evidence":["check and actual result"],"repairBrief":"required for revise","testing":"concrete local testing steps","files":["every reviewed changed path"]}'
     : `{"outcome":"${role.name === 'planner' ? 'ready' : 'passing'}|block","summary":"...","evidence":["actual result"],"files":["every path changed by you"],"testing":"concrete local testing steps"}`;
@@ -15,7 +15,8 @@ export function buildPiPrompt({ task, role, repairBrief, baseline, files = [] })
     `Verification: ${JSON.stringify(task.criteria)}. Dependencies: ${JSON.stringify(task.dependsOn)}.`,
     `Baseline HEAD: ${baseline?.head ?? 'unknown'}. Existing user changes (do not edit or stage): ${JSON.stringify(Object.keys(baseline?.dirty ?? {}))}.`,
     `Feature changes to inspect: ${JSON.stringify(files)}.`,
-    repairBrief ? `Independent validator repair brief: ${repairBrief}` : '',
+    humanFeedback ? `Human review requested changes to the previously accepted commit: ${humanFeedback}` : '',
+    repairBrief && repairBrief !== humanFeedback ? `Independent validator repair brief: ${repairBrief}` : '',
     'Read AGENTS.md and PROGRESS.md in the repository root. Resolve repository artifacts from cwd and skill references relative to their SKILL.md.',
     'Work on this feature only. Do not create further subagents. The host orchestrates the three independent roles.',
     'No hagas merge, push, deploy, cambios de credenciales ni operaciones de producción. Do not commit, stage, switch branches, or alter Git configuration/hooks. The host owns acceptance and the scoped commit.',
@@ -51,15 +52,33 @@ export function validateRoleResult(result, role) {
   return { outcome: roleOutcome, verdict, summary, evidence, files, repairBrief, testing };
 }
 
+const clip = (value, length = 160) => {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  return text.length > length ? `${text.slice(0, length - 1)}…` : text;
+};
+// Short, human-readable description of what a tool is doing; never the full payload.
+export function describeTool(name, args = {}) {
+  const target = args.path ?? args.file_path ?? args.filePath ?? args.pattern ?? args.query ?? args.url;
+  if (name === 'bash' && args.command) return `bash · ${clip(args.command, 140)}`;
+  return target ? `${name} · ${clip(target, 140)}` : name;
+}
+const resultText = (result) => (result?.content ?? []).filter((part) => part.type === 'text').map((part) => part.text).join('\n');
+
 export function mapPiEvent(event, role) {
   const base = { stage: roleStages[role.name], role: role.name, skill: role.skillName };
   if (event.type === 'agent_start') return { ...base, message: `Sesión ${role.name} iniciada` };
-  if (event.type === 'tool_execution_start') return { ...base, message: `${event.toolName} en curso` };
-  if (event.type === 'tool_execution_end') return { ...base, message: `${event.toolName}: ${event.isError ? 'error' : 'finalizada'}`, level: event.isError ? 'error' : 'info' };
+  if (event.type === 'tool_execution_start') return { ...base, kind: 'tool', message: describeTool(event.toolName, event.args) };
+  if (event.type === 'tool_execution_end' && event.isError) return { ...base, kind: 'tool', level: 'error', message: `${event.toolName} falló${resultText(event.result) ? `: ${clip(resultText(event.result))}` : ''}` };
+  if (event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_end' && event.assistantMessageEvent.content?.trim()) {
+    const text = event.assistantMessageEvent.content.replace(/<harness-result>[^]*$/, '').trim();
+    return text ? { ...base, kind: 'note', message: clip(text, 240) } : null;
+  }
+  if (event.type === 'auto_retry_start') return { ...base, level: 'warn', message: 'Error transitorio del proveedor; Pi reintenta' };
+  if (event.type === 'compaction_start') return { ...base, message: 'Pi compacta el contexto de la sesión' };
   return null;
 }
 
-export async function runPiRole({ task, role, runtime, cwd, emit = () => {}, signal, repairBrief, baseline, files, piBin = 'pi', provider = pinnedPi.provider, model = pinnedPi.model, timeoutMs = 1_800_000, spawnImpl = spawn }) {
+export async function runPiRole({ task, role, runtime, cwd, emit = () => {}, signal, repairBrief, humanFeedback, baseline, files, piBin = 'pi', provider = pinnedPi.provider, model = pinnedPi.model, timeoutMs = 1_800_000, spawnImpl = spawn }) {
   if (signal?.aborted) throw new Error('Ejecución cancelada');
   emit({ stage: roleStages[role.name], role: role.name, skill: role.skillName, message: `Pi · ${provider}/${model ?? role.model} · ${role.thinking}` });
   const system = [runtime.instructions.text, runtime.flow.text, role.developerInstructions, `Skill source: ${role.skill.path}\n${role.skill.text}`].join('\n\n');
@@ -121,6 +140,6 @@ export async function runPiRole({ task, role, runtime, cwd, emit = () => {}, sig
       }
     });
     child.on('close', (code) => { if (!finished) finish(new Error(stderr.trim() || `Pi terminó sin resultado (código ${code})`)); });
-    child.stdin.write(`${JSON.stringify({ id: `${task.id}-${role.name}`, type: 'prompt', message: buildPiPrompt({ task, role, repairBrief, baseline, files }) })}\n`);
+    child.stdin.write(`${JSON.stringify({ id: `${task.id}-${role.name}`, type: 'prompt', message: buildPiPrompt({ task, role, repairBrief, humanFeedback, baseline, files }) })}\n`);
   });
 }

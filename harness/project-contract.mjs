@@ -84,8 +84,6 @@ function validateTask(task, index) {
     sourceStatus,
     area: requiredText(task, 'area', index),
     objective: requiredText(task, 'user_visible_behavior', index),
-    role: null,
-    skill: null,
     gate: sourceGates.get(sourceStatus),
     blocked: sourceStatus === 'blocked' ? { reason: task.notes, resolution: null } : null,
     dependsOn: stringList(task.depends_on, 'depends_on', index),
@@ -100,6 +98,7 @@ function validateConfig(document) {
   if (!document || typeof document !== 'object' || document.version !== 1) {
     throw new Error('.harness/config.json debe usar version 1');
   }
+  // Legacy files may still name an engine; execution is always Pi, so only a known value is tolerated.
   if (document.defaultEngine != null && !['mock', 'pi'].includes(document.defaultEngine)) {
     throw new Error('.harness/config.json contiene un motor no válido');
   }
@@ -108,7 +107,6 @@ function validateConfig(document) {
   }
   return {
     version: 1,
-    defaultEngine: document.defaultEngine ?? 'mock',
     reviewRequired: true,
     autoMerge: false
   };
@@ -149,7 +147,6 @@ export function inspectProject(explicitPath) {
     path: projectPath,
     name: basename(projectPath),
     tasks,
-    format: 'feature-list',
     config,
     files: { tasks: Boolean(taskDocument), config: Boolean(configDocument) },
     emptyReason: taskDocument ? (tasks.length ? null : 'feature_list.json no contiene tareas') : 'Falta feature_list.json'

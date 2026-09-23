@@ -16,11 +16,14 @@ Node 22 o superior y Pi instalado. No necesita dependencias npm.
 ## Uso
 
 1. **Abrir proyecto…**: selecciona su raíz Git con el selector nativo de macOS. Verás el nombre, la ruta y las features cargadas.
-2. Marca las features pendientes. Si alguna depende de otra sin aceptar, selecciona también esa dependencia. No se ejecutan features no seleccionadas.
-3. **Ejecutar selección** confirma las modificaciones y commits locales. La cola respeta dependencias y WIP=1.
-4. Abre una tarjeta para ver el rol, skill, evidencia, correcciones, archivos y cómo probarlo.
+2. Marca las features pendientes. Al marcar una se añaden sus dependencias pendientes; al desmarcarla se quitan las que dependían de ella. No se ejecutan features no seleccionadas.
+3. **Ejecutar selección** muestra el orden de ejecución y confirma las modificaciones y commits locales. La cola respeta dependencias y WIP=1.
+4. Abre una tarjeta (panel lateral; `Esc` lo cierra y la URL `#<id>` enlaza a ella) para ver el rol, skill, actividad de Pi, evidencia, correcciones, archivos y cómo probarlo.
 5. El validator puede aceptar, pedir correcciones o bloquear. Las correcciones vuelven al implementer y se validan otra vez (máximo tres reparaciones por intento).
-6. La aceptación independiente se guarda como `accepted` y genera un commit local. La tarjeta queda en **Revisión humana** hasta que la marques revisada. No hay push, deploy, creación de PR ni merge automático.
+6. La aceptación independiente se guarda como `accepted` y genera un commit local. La tarjeta queda en **Revisión humana**. No hay push, deploy, creación de PR ni merge automático.
+7. **Aprobar revisión** la marca como terminada. **Pedir cambios** conserva el commit y lanza otra vuelta implementer → validator con tu feedback, que acaba en un commit `fix: address review of <id>`.
+
+Una dependencia solo cuenta cuando está `accepted` **y** has aprobado su revisión humana: nada se construye sobre un commit que no has revisado. Mientras tanto la cola espera sin bloquearse.
 
 **Pausar cola** deja terminar la feature actual. **Detener ejecución** interrumpe el rol y pausa la cola. **Continuar desde este paso** conserva la baseline y los resultados anteriores. **Quitar de la cola** no borra ni revierte archivos.
 
@@ -75,6 +78,8 @@ El antiguo `.harness/config.json` es opcional y solo se valida si existe; no sel
 - Una especificación existente sin prueba de actualidad se revisa con planner. Una feature `passing` con spec pasa a validación independiente.
 - Se conserva el trabajo previo ajeno. Si el inventario o `PROGRESS.md` ya tienen cambios, hay archivos staged, cambia HEAD/rama o el diff no se puede aislar, se bloquea el commit. No hay reset ni rollback automático.
 - Si falla un hook o la firma de commit, los archivos quedan disponibles para inspección; no se desactiva ese control automáticamente. Resuelve el problema antes de continuar.
+- El servidor solo comprueba si `DEVEXPERT_API_KEY` está presente en su entorno (nunca lee su valor) y avisa en la UI si falta.
+- La UI vive en `public/` (módulos ES sin build). El estado se consulta cada 1,2 s con ETag; la vista solo se redibuja por regiones cuando algo cambia.
 - El servidor escucha solo en loopback. Rechaza mutaciones desde otros orígenes. No expongas este servidor a Internet.
 
 ## Verificación
@@ -87,4 +92,4 @@ pnpm check:pi       # Protocolo RPC local, sin inferencia
 HARNESS_SOURCE_PROJECT=/ruta/al/proyecto ~/.local/bin/oprun pnpm check:pi:e2e
 ```
 
-Las pruebas cubren roles reales del adaptador, ciclo de reparación, aceptación/commit, preservación de WIP, cola/dependencias, cancelación, persistencia, errores de proveedor y API HTTP. La prueba real usa una feature mínima en un repositorio temporal y conserva su ruta para inspección.
+Las pruebas cubren roles reales del adaptador, ciclo de reparación, revisión humana (aprobar y pedir cambios), aceptación/commit, recuperación de escrituras interrumpidas, preservación de WIP, cola/dependencias, cancelación, persistencia, errores de proveedor, API HTTP y el modelo de vista de la UI. La prueba real usa una feature mínima en un repositorio temporal y conserva su ruta para inspección.

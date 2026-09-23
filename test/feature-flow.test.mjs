@@ -155,3 +155,24 @@ test('el handoff conserva la salida RPC completa sin volver a interpretar sus et
   assert.equal(current.steps.length, 3);
   assert.ok(current.steps.every((step) => step.output.includes('<harness-result>')));
 });
+
+test('un temporal de escritura huérfano no atasca la finalización tras un corte', async () => {
+  const cwd = fixture();
+  const current = run();
+  let crash = true;
+  const save = () => { if (crash && current.acceptance?.hashes) { crash = false; throw new Error('crash after writes'); } };
+  await assert.rejects(executeFeature({ cwd, run: current, executor: fakeExecutor(), save, emit() {} }), /crash after writes/);
+  put(cwd, 'PROGRESS.md.harness-tmp', 'partial write');
+  await executeFeature({ cwd, run: current, executor: fakeExecutor(), save() {}, emit() {} });
+  assert.equal(current.status, 'review');
+  assert.equal(git(cwd, 'status', '--porcelain'), '');
+});
+
+test('errores de proyecto y Git se explican sin rutas internas ni códigos crudos', async () => {
+  const missing = fixture();
+  git(missing, 'rm', '-q', 'AGENTS.md');
+  assert.throws(() => loadRuntime(missing), /^Error: Falta AGENTS\.md en el proyecto$/);
+  const detached = fixture();
+  git(detached, 'checkout', '-q', '--detach');
+  await assert.rejects(execute(detached, run(), fakeExecutor()), /HEAD está desacoplado/);
+});

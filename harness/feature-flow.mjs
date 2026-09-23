@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { inspectProject } from './project-contract.mjs';
@@ -7,10 +7,19 @@ import { runPiRole, validateRoleResult } from './pi-role.mjs';
 import { pinnedPi } from './pi-config.mjs';
 import { assertWorkspace, featureChanges, fileHash, git, sameSnapshot, scopedCommit, snapshot, startWorkspace } from './git-workspace.mjs';
 
+const temporaryPath = (path) => `${path}.harness-tmp`;
 function atomicText(path, text) {
-  const temporary = `${path}.harness-tmp`;
-  writeFileSync(temporary, text, { flag: 'wx' });
-  renameSync(temporary, path);
+  writeFileSync(temporaryPath(path), text);
+  renameSync(temporaryPath(path), path);
+}
+// A crash between write and rename leaves only our own temporary file behind.
+function removeStaleTemporaries(cwd, paths) {
+  for (const path of paths) rmSync(temporaryPath(join(cwd, path)), { force: true });
+}
+function writeFeatureStatus(cwd, id, status) {
+  const features = readFeatures(cwd);
+  features.find((item) => item.id === id).status = status;
+  atomicText(join(cwd, 'feature_list.json'), `${JSON.stringify(features, null, 2)}\n`);
 }
 function readFeatures(cwd) { return JSON.parse(readFileSync(join(cwd, 'feature_list.json'), 'utf8')); }
 function taskNow(cwd, id) {
@@ -31,6 +40,7 @@ function checkInventory(cwd, run) {
 
 async function finalize({ run, cwd, save, emit }) {
   const acceptance = run.acceptance;
+  removeStaleTemporaries(cwd, Object.keys(acceptance.documents));
   // Recover the narrow crash window after our commit and before recording its hash.
   const head = git(cwd, 'rev-parse', 'HEAD');
   if (head !== run.baseline.head) {
@@ -75,6 +85,14 @@ export async function executeFeature({ run, cwd, signal, save, emit, executor = 
     run.steps = [];
     save();
   }
+  // Human rework reopens an accepted feature; the harness owns that status change.
+  if (run.reopen && !run.reopened) {
+    writeFeatureStatus(cwd, run.taskId, 'in_progress');
+    run.reopened = true;
+    run.ownedFiles = ['feature_list.json'];
+    run.nextRole = 'implementer';
+    save();
+  }
   if (run.acceptance) return finalize({ run, cwd, save, emit });
   assertWorkspace(cwd, run.baseline);
   checkInventory(cwd, run);
@@ -101,7 +119,7 @@ export async function executeFeature({ run, cwd, signal, save, emit, executor = 
     const before = run.roleBaseline?.role === roleName ? run.roleBaseline.files : snapshot(cwd);
     run.roleBaseline = { role: roleName, files: before };
     save();
-    let result = await executor({ task, role, runtime, cwd, signal, emit, baseline: run.baseline, repairBrief: run.repairBrief, files: featureChanges(cwd, run.baseline), ...piOptions });
+    let result = await executor({ task, role, runtime, cwd, signal, emit, baseline: run.baseline, repairBrief: run.repairBrief, humanFeedback: run.humanFeedback, files: featureChanges(cwd, run.baseline), ...piOptions });
     // Validate the same contract even for injected test adapters.
     result = { ...validateRoleResult(result, roleName), output: result.output ?? '' };
     run.steps.push({ role: roleName, skill: role.skillName, provider: run.provider, model: run.model, at: new Date().toISOString(), ...result });
@@ -146,7 +164,7 @@ export async function executeFeature({ run, cwd, signal, save, emit, executor = 
       const allFiles = [...new Set([...files, 'feature_list.json', 'PROGRESS.md'])].sort();
       run.acceptance = {
         files: allFiles, beforeHashes: Object.fromEntries(allFiles.map((path) => [path, fileHash(cwd, path)])),
-        message: `feat: complete ${task.id}\n\nHarness-Run: ${run.id}`,
+        message: `${run.reopen ? `fix: address review of ${task.id}` : `feat: complete ${task.id}`}\n\nHarness-Run: ${run.id}`,
         documents: {
           'feature_list.json': `${JSON.stringify(features, null, 2)}\n`,
           'PROGRESS.md': `${progress.trimEnd()}\n\n## ${task.id} · independent validator accept\n\n${result.summary}\n\n${result.evidence.map((item) => `- ${item}`).join('\n')}\n\nCómo probarlo: ${result.testing}\n`

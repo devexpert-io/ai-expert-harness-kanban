@@ -15,7 +15,14 @@ export class StateStore {
     if (this.data.runs.some((run) => ['queued', 'interrupted'].includes(run.status))) this.data.paused = true;
     this.save();
   }
+  saveSoon(delayMs = 250) {
+    this.timer ??= setTimeout(() => this.save(), delayMs);
+    this.timer.unref?.();
+  }
+  flush() { if (this.timer) this.save(); }
   save() {
+    clearTimeout(this.timer);
+    this.timer = null;
     mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
     const temp = `${this.path}.tmp`;
     writeFileSync(temp, `${JSON.stringify(this.data, null, 2)}\n`, { mode: 0o600 });

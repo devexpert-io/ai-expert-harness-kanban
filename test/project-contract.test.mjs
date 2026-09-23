@@ -14,7 +14,7 @@ test('carga tareas, estados, bloqueos y configuración del proyecto seleccionado
   assert.equal(project.tasks.length, 3);
   assert.equal(project.tasks[1].state, 'validating');
   assert.equal(project.tasks[2].blocked.reason, 'Falta referencia visual; hay que seleccionar una variante.');
-  assert.equal(project.config.defaultEngine, 'mock');
+  assert.equal(project.config.reviewRequired, true);
   assert.deepEqual(project.files, { tasks: true, config: true });
 });
 
@@ -63,7 +63,6 @@ test('carga el feature_list real con estados y dependencias', () => {
     }
   ]));
   const project = inspectProject(projectPath);
-  assert.equal(project.format, 'feature-list');
   assert.deepEqual(project.tasks.map((task) => task.state), ['done', 'pending']);
   assert.deepEqual(project.tasks[1].dependsOn, ['base']);
   assert.equal(project.tasks[1].objective, 'La persona usa la siguiente feature.');

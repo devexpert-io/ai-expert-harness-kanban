@@ -20,9 +20,23 @@ function fakeSpawn(records, inspect = () => {}) {
   };
 }
 test('herramientas no adelantan las fases ni fabrican aceptación', () => {
-  assert.equal(mapPiEvent({ type: 'tool_execution_end', toolName: 'bash' }, role).stage, 'implementing');
+  assert.equal(mapPiEvent({ type: 'tool_execution_start', toolName: 'bash', args: { command: 'ls' } }, role).stage, 'implementing');
   assert.equal(mapPiEvent({ type: 'agent_settled' }, role), null);
   assert.equal(mapPiEvent({ type: 'tool_execution_end', toolName: 'bash', isError: true }, role).level, 'error');
+});
+test('la actividad describe herramientas y notas sin volcar el payload ni el resultado estructurado', () => {
+  assert.equal(mapPiEvent({ type: 'tool_execution_start', toolName: 'bash', args: { command: 'node   --test\n test/a.mjs' } }, role).message, 'bash · node --test test/a.mjs');
+  assert.equal(mapPiEvent({ type: 'tool_execution_start', toolName: 'edit', args: { path: 'src/app.js', oldText: 'secret' } }, role).message, 'edit · src/app.js');
+  assert.equal(mapPiEvent({ type: 'tool_execution_end', toolName: 'bash', isError: false }, role), null);
+  assert.match(mapPiEvent({ type: 'tool_execution_end', toolName: 'bash', isError: true, result: { content: [{ type: 'text', text: 'exit 1' }] } }, role).message, /bash falló: exit 1/);
+  const note = { type: 'message_update', assistantMessageEvent: { type: 'text_end', content: 'Tests pass.\n<harness-result>{"x":1}</harness-result>' } };
+  assert.equal(mapPiEvent(note, role).message, 'Tests pass.');
+  assert.equal(mapPiEvent({ type: 'message_update', assistantMessageEvent: { type: 'text_end', content: '<harness-result>{}</harness-result>' } }, role), null);
+  assert.equal(mapPiEvent({ type: 'tool_execution_start', toolName: 'bash', args: { command: 'x'.repeat(400) } }, role).message.length, 147);
+});
+test('el feedback de revisión humana llega al implementer', () => {
+  assert.match(buildPiPrompt({ task, role, humanFeedback: 'Usa otro color', repairBrief: 'Usa otro color' }), /Human review requested changes[^]*Usa otro color/);
+  assert.doesNotMatch(buildPiPrompt({ task, role, humanFeedback: 'Usa otro color', repairBrief: 'Usa otro color' }), /validator repair brief/);
 });
 test('el handoff conserva límites, baseline y repair brief', () => {
   const prompt = buildPiPrompt({ task, role, repairBrief: 'Fix boundary', baseline: { head: 'abc', dirty: { 'user.txt': 'hash' } } });

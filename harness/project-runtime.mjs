@@ -17,7 +17,11 @@ export function loadRuntime(projectPath) {
   projectPath = realpathSync(projectPath);
   const sources = [];
   const read = (path) => {
-    const actual = realpathSync(path);
+    let actual;
+    try { actual = realpathSync(path); } catch (error) {
+      if (error.code === 'ENOENT') throw new Error(`Falta ${relative(projectPath, path)} en el proyecto`);
+      throw error;
+    }
     if (relative(projectPath, actual).startsWith('..')) throw new Error(`Instrucción fuera del proyecto: ${path}`);
     if (statSync(actual).size > 250_000) throw new Error(`Instrucción demasiado grande: ${path}`);
     const text = readFileSync(actual, 'utf8');

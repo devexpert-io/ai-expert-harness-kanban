@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark light">
+    <title>AI Expert · Harness</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main>
+      <header class="topbar">
+        <a class="brand" href="/">AI Expert <span>/ Harness</span></a>
+        <div class="toolbar">
+          <span id="connection" class="connection" role="status"><span class="dot"></span><span id="connection-text">Conectando…</span></span>
+          <button id="open">Abrir proyecto…</button>
+        </div>
+      </header>
+      <section class="project-heading">
+        <p class="eyebrow">FEATURE FLOW</p>
+        <h1 id="project-name">Abre un proyecto</h1>
+        <p id="project-path" class="muted">Elige la raíz de un repositorio con feature_list.json para ver su backlog.</p>
+        <div id="runtime-strip" class="runtime-strip" hidden></div>
+      </section>
+      <div id="notices" class="notices"></div>
+      <p id="flash" class="notice" role="status" hidden></p>
+      <section id="workspace" hidden>
+        <div class="board-toolbar">
+          <div class="queue-status"><span id="queue-dot" class="dot"></span><div><strong id="queue-label"></strong><p class="muted" id="queue-help"></p></div></div>
+          <div class="toolbar"><button id="pause" hidden>Pausar cola</button><button id="execute" class="primary" disabled>Selecciona features</button></div>
+        </div>
+        <div class="board-scroll"><section id="board" class="board" aria-label="Proceso de las features"></section></div>
+      </section>
+      <section id="empty" class="empty">
+        <div class="empty-mark" aria-hidden="true">→</div>
+        <h2>El proyecto es la fuente de verdad.</h2>
+        <p>Carga <code>feature_list.json</code>, selecciona las features pendientes y sigue su planificación, implementación y validación independiente.</p>
+        <p class="muted">Usa las skills y los subagentes del repositorio. Una feature cada vez. Nada avanza sobre un commit que no hayas revisado.</p>
+      </section>
+    </main>
+    <div id="scrim" class="scrim" hidden></div>
+    <aside id="detail" class="detail" role="dialog" aria-labelledby="detail-title" hidden></aside>
+    <dialog id="dialog"></dialog>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
