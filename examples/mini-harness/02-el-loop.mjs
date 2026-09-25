@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadRole, logEvent, rolePrompt, runRole } from './pi.mjs';
 
+const next = { planner: 'implementer', implementer: 'validator' };
+
 // `wrap` permite al paso 4 rodear cada rol con comprobaciones del host sin cambiar el loop.
 export async function featureLoop(project, feature, { maxRepairs = 3, onStep = () => {}, wrap = (role, execute) => execute() } = {}) {
   let role = 'planner';
@@ -17,13 +19,11 @@ export async function featureLoop(project, feature, { maxRepairs = 3, onStep = (
     const result = await wrap(role, execute);
     console.log(`  ${feature.id} · ${role} → ${result.verdict ?? result.outcome}: ${result.summary}`);
     if (result.outcome === 'block' || result.verdict === 'block') throw new Error(`${role} bloquea: ${result.summary}`);
-    if (role === 'planner') role = 'implementer';
-    else if (role === 'implementer') role = 'validator';
-    else if (result.verdict === 'revise') {
-      if (++repairs > maxRepairs) throw new Error(`Límite de ${maxRepairs} reparaciones`);
-      repairBrief = result.repairBrief;
-      role = 'implementer';
-    } else return result; // accept: una verificación independiente decide que está hecho
+    if (next[role]) { role = next[role]; continue; }
+    if (result.verdict === 'accept') return result; // una verificación independiente decide que está hecho
+    if (++repairs > maxRepairs) throw new Error(`Límite de ${maxRepairs} reparaciones`); // revise
+    repairBrief = result.repairBrief;
+    role = 'implementer';
   }
 }
 
