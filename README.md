@@ -13,6 +13,10 @@ pnpm dev
 
 La API key de DevExpert Inference se configura desde la UI (**Configurar API key**): se comprueba contra `/v1/models`, vive en memoria y solo se guarda en disco (`.harness-data/credentials.json`, permisos 600) si marcas *Recordarla*. Nunca vuelve al navegador. También vale `DEVEXPERT_API_KEY` en el entorno, por ejemplo con `~/.local/bin/oprun pnpm dev`; la de la UI tiene prioridad.
 
+Para ensayar sin inferencia: `pnpm dev:ensayo` usa `examples/mini-harness/fake-pi.mjs`, que habla el protocolo RPC de Pi y hace un trabajo mínimo por rol, con un estado separado en `.harness-data/ensayo/`.
+
+La versión didáctica, en cinco pasos, está en [`examples/mini-harness`](examples/mini-harness/README.md).
+
 ## Uso
 
 1. **Abrir proyecto…**: selecciona la raíz Git con el selector nativo de macOS. El harness detecta cómo se revisa: **GitHub** si `origin` está en GitHub y `gh` está autenticado; si no, **ramas locales**. `HARNESS_REVIEW=local|github` lo fuerza.
