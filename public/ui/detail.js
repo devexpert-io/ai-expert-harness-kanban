@@ -1,16 +1,18 @@
 import { clockTime, html, list, shortHash } from './html.js';
 import { attentionStatuses, byId, repairs } from './model.js';
 
-const statusLabels = { queued: 'En cola', running: 'Ejecutando', blocked: 'Bloqueada', interrupted: 'Interrumpida', review: 'Pendiente de tu revisión', done: 'Revisada', 'changes-requested': 'Cambios pedidos', discarded: 'Descartada' };
+const statusLabels = { queued: 'En cola', running: 'Ejecutando', blocked: 'Bloqueada', interrupted: 'Interrumpida', review: 'Pendiente de tu revisión', done: 'Integrada', 'changes-requested': 'Cambios pedidos', discarded: 'Descartada', closed: 'PR cerrada' };
 
-function actions(run, busy) {
+function actions(run, { busy, review }) {
   if (!run) return '';
   const button = (name, label, style = '') => html`<button class="${style}" data-action="${name}" data-run="${run.id}" ${busy ? 'disabled' : ''}>${label}</button>`;
+  const github = review?.mode === 'github';
   const buttons = [
     run.status === 'running' && button('stop', 'Detener ejecución', 'danger'),
     attentionStatuses.includes(run.status) && button('retry', 'Continuar desde este paso', 'primary'),
     ['queued', 'blocked', 'interrupted'].includes(run.status) && button('discard', 'Quitar de la cola', 'quiet'),
-    run.status === 'review' && button('reviewed', 'Aprobar revisión', 'primary'),
+    run.status === 'review' && run.pr?.url && html`<a class="button primary" href="${run.pr.url}" target="_blank" rel="noopener noreferrer">Abrir PR #${run.pr.number} ↗</a>`,
+    run.status === 'review' && button('merge', github ? 'Mergear PR' : `Integrar en ${review?.base ?? 'la base'}`, github ? '' : 'primary'),
     run.status === 'review' && button('reject', 'Pedir cambios')
   ].filter(Boolean);
   return buttons.length ? html`<div class="toolbar detail-actions">${buttons}</div>` : '';
@@ -46,13 +48,13 @@ function history(task) {
   </li>`)}</ol>`;
 }
 
-export function renderDetail(task, { all, busy }) {
+export function renderDetail(task, { all, busy, review }) {
   const index = byId(all);
   const run = task.run;
   const fixes = repairs(run);
   return html`<header class="detail-heading">
       <div><p class="eyebrow">${task.id} · ${task.area}</p><h2 id="detail-title">${task.title}</h2>
-        <p class="detail-badges"><span class="chip">${task.gate}</span>${run ? html`<span class="chip tone-${run.status}">${statusLabels[run.status] ?? run.status}</span>` : ''}${fixes ? html`<span class="chip">Reparaciones ${fixes}/3</span>` : ''}</p>
+        <p class="detail-badges">${task.live ? '' : html`<span class="chip">${task.gate}</span>`}${run ? html`<span class="chip tone-${run.status}">${statusLabels[run.status] ?? run.status}</span>` : ''}${fixes ? html`<span class="chip">Reparaciones ${fixes}/3</span>` : ''}</p>
       </div>
       <button class="quiet icon" data-close aria-label="Cerrar detalle (Esc)">✕</button>
     </header>
@@ -60,10 +62,13 @@ export function renderDetail(task, { all, busy }) {
     ${task.blocked ? html`<p class="notice error">${task.blocked.reason}</p>` : ''}
     ${task.live && run.error ? html`<p class="notice error">${run.error}</p>` : ''}
     ${run?.humanFeedback && task.live ? html`<p class="notice"><strong>Cambios que pediste:</strong> ${run.humanFeedback}</p>` : ''}
-    ${actions(run, busy)}
+    ${actions(run, { busy, review })}
     ${run?.status === 'review' ? html`<section class="review-box">
       <h3>Revisión humana</h3>
-      <p>Commit local <code>${shortHash(run.commit)}</code>${run.files?.length ? html` · ${run.files.length} archivo(s)` : ''}. Sin push ni merge. Las features que dependen de esta esperan tu aprobación.</p>
+      <p>${run.pr?.url ? html`PR <a href="${run.pr.url}" target="_blank" rel="noopener noreferrer">#${run.pr.number}</a> contra <code>${review?.base}</code>` : html`Rama <code>${run.branch}</code> lista para integrar en <code>${review?.base}</code>`} · commit <code>${shortHash(run.commit)}</code>${run.files?.length ? html` · ${run.files.length} archivo(s)` : ''}. Las features que dependen de esta esperan a que la integres.</p>
+      ${run.syncConflicts?.length ? html`<p class="notice error">La base ha cambiado y choca en ${run.syncConflicts.join(', ')}. Resuélvelo en la rama y vuelve a intentarlo.</p>` : ''}
+      ${run.reviewError ? html`<p class="notice warn">No se pudo consultar la PR: ${run.reviewError}</p>` : ''}
+      ${run.worktree ? html`<h3>Probarlo en local</h3><p><code class="wrap">cd ${run.worktree}</code></p>` : ''}
       ${run.testing ? html`<h3>Cómo probarlo</h3><p class="pre-wrap">${run.testing}</p>` : ''}
       ${run.files?.length ? html`<h3>Archivos del commit</h3>${list(run.files)}` : ''}
     </section>` : ''}

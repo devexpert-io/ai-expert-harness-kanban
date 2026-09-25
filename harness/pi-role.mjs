@@ -78,7 +78,7 @@ export function mapPiEvent(event, role) {
   return null;
 }
 
-export async function runPiRole({ task, role, runtime, cwd, emit = () => {}, signal, repairBrief, humanFeedback, baseline, files, piBin = 'pi', provider = pinnedPi.provider, model = pinnedPi.model, timeoutMs = 1_800_000, spawnImpl = spawn }) {
+export async function runPiRole({ task, role, runtime, cwd, emit = () => {}, signal, repairBrief, humanFeedback, baseline, files, piBin = 'pi', provider = pinnedPi.provider, model = pinnedPi.model, timeoutMs = 1_800_000, env = process.env, spawnImpl = spawn }) {
   if (signal?.aborted) throw new Error('Ejecución cancelada');
   emit({ stage: roleStages[role.name], role: role.name, skill: role.skillName, message: `Pi · ${provider}/${model ?? role.model} · ${role.thinking}` });
   const system = [runtime.instructions.text, runtime.flow.text, role.developerInstructions, `Skill source: ${role.skill.path}\n${role.skill.text}`].join('\n\n');
@@ -88,7 +88,7 @@ export async function runPiRole({ task, role, runtime, cwd, emit = () => {}, sig
   if (provider) args.push('--provider', provider);
   if (provider === pinnedPi.provider) args.push('--extension', providerExtension);
   return new Promise((resolve, reject) => {
-    const child = spawnImpl(process.execPath, [fileURLToPath(new URL('./pi-supervisor.mjs', import.meta.url)), piBin, ...args], { cwd, env: process.env, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+    const child = spawnImpl(process.execPath, [fileURLToPath(new URL('./pi-supervisor.mjs', import.meta.url)), piBin, ...args], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
     let finished = false;
     let finalText = '';
     let stderr = '';

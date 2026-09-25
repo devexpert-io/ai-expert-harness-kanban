@@ -6,7 +6,8 @@ function status(task, index) {
   if (task.live && attentionStatuses.includes(run.status)) return { tone: 'error', text: run.error ?? 'Necesita atención' };
   if (task.blocked) return { tone: 'error', text: task.blocked.reason || 'Bloqueada en feature_list.json' };
   if (task.live && run.status === 'running') return { tone: 'live', text: run.events.at(-1)?.message ?? `${run.role ?? 'Preparando'}…` };
-  if (task.live && run.status === 'review') return { tone: 'review', text: `Commit ${shortHash(run.commit)} · revisa y aprueba o pide cambios` };
+  if (task.live && run.status === 'review' && run.syncConflicts?.length) return { tone: 'error', text: `Conflicto con la base en ${run.syncConflicts.join(', ')}` };
+  if (task.live && run.status === 'review') return { tone: 'review', text: run.pr?.number ? `PR #${run.pr.number} · pendiente de tu revisión` : `${run.branch ?? `Commit ${shortHash(run.commit)}`} · pendiente de tu revisión` };
   const { review, other } = waiting(task, index);
   if (task.live && run.status === 'queued') {
     if (review.length) return { tone: 'idle', text: `En cola · espera tu revisión de ${review.join(', ')}` };

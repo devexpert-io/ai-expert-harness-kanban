@@ -70,7 +70,7 @@ async function finalize({ run, cwd, save, emit }) {
   run.status = 'review';
   run.error = null;
   save();
-  emit({ message: `Aceptación independiente y commit ${run.commit.slice(0, 8)}. Pendiente de revisión humana; sin push ni merge.` });
+  emit({ message: `Aceptación independiente y commit ${run.commit.slice(0, 8)} en ${run.branch ?? 'la rama de la feature'}.` });
 }
 
 export async function executeFeature({ run, cwd, signal, save, emit, executor = runPiRole, piOptions = {}, maxRepairs = 3 }) {

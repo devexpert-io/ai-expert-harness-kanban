@@ -13,6 +13,7 @@
         <a class="brand" href="/">AI Expert <span>/ Harness</span></a>
         <div class="toolbar">
           <span id="connection" class="connection" role="status"><span class="dot"></span><span id="connection-text">Conectando…</span></span>
+          <button id="credentials" class="quiet" hidden>Configurar API key</button>
           <button id="open">Abrir proyecto…</button>
         </div>
       </header>
@@ -27,7 +28,7 @@
       <section id="workspace" hidden>
         <div class="board-toolbar">
           <div class="queue-status"><span id="queue-dot" class="dot"></span><div><strong id="queue-label"></strong><p class="muted" id="queue-help"></p></div></div>
-          <div class="toolbar"><button id="pause" hidden>Pausar cola</button><button id="execute" class="primary" disabled>Selecciona features</button></div>
+          <div class="toolbar"><button id="check-reviews" class="quiet" hidden>Comprobar PRs</button><button id="pause" hidden>Pausar cola</button><button id="execute" class="primary" disabled>Selecciona features</button></div>
         </div>
         <div class="board-scroll"><section id="board" class="board" aria-label="Proceso de las features"></section></div>
       </section>
@@ -35,7 +36,7 @@
         <div class="empty-mark" aria-hidden="true">→</div>
         <h2>El proyecto es la fuente de verdad.</h2>
         <p>Carga <code>feature_list.json</code>, selecciona las features pendientes y sigue su planificación, implementación y validación independiente.</p>
-        <p class="muted">Usa las skills y los subagentes del repositorio. Una feature cada vez. Nada avanza sobre un commit que no hayas revisado.</p>
+        <p class="muted">Usa las skills y los subagentes del repositorio. Las features independientes avanzan en paralelo. Nada se construye sobre un cambio que no hayas revisado.</p>
       </section>
     </main>
     <div id="scrim" class="scrim" hidden></div>

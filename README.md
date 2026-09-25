@@ -4,28 +4,32 @@ Capa visual del `feature-flow` de AI Expert. Abre un proyecto, selecciona las fe
 
 ## Arranque
 
-Node 22 o superior y Pi instalado. No necesita dependencias npm.
+Node 22 o superior, Git y Pi instalados. No necesita dependencias npm. Para revisar en GitHub, además `gh` autenticado.
 
 ```sh
-~/.local/bin/oprun pnpm dev
+pnpm dev
 # http://localhost:4173
 ```
 
-`oprun` proporciona las credenciales al servidor y sus procesos Pi. La aplicación no lee ni guarda claves. Ver Pi instalado no implica tener crédito o autenticación válida: los errores del proveedor se muestran en la feature afectada.
+La API key de DevExpert Inference se configura desde la UI (**Configurar API key**): se comprueba contra `/v1/models`, vive en memoria y solo se guarda en disco (`.harness-data/credentials.json`, permisos 600) si marcas *Recordarla*. Nunca vuelve al navegador. También vale `DEVEXPERT_API_KEY` en el entorno, por ejemplo con `~/.local/bin/oprun pnpm dev`; la de la UI tiene prioridad.
 
 ## Uso
 
-1. **Abrir proyecto…**: selecciona su raíz Git con el selector nativo de macOS. Verás el nombre, la ruta y las features cargadas.
-2. Marca las features pendientes. Al marcar una se añaden sus dependencias pendientes; al desmarcarla se quitan las que dependían de ella. No se ejecutan features no seleccionadas.
-3. **Ejecutar selección** muestra el orden de ejecución y confirma las modificaciones y commits locales. La cola respeta dependencias y WIP=1.
-4. Abre una tarjeta (panel lateral; `Esc` lo cierra y la URL `#<id>` enlaza a ella) para ver el rol, skill, actividad de Pi, evidencia, correcciones, archivos y cómo probarlo.
-5. El validator puede aceptar, pedir correcciones o bloquear. Las correcciones vuelven al implementer y se validan otra vez (máximo tres reparaciones por intento).
-6. La aceptación independiente se guarda como `accepted` y genera un commit local. La tarjeta queda en **Revisión humana**. No hay push, deploy, creación de PR ni merge automático.
-7. **Aprobar revisión** la marca como terminada. **Pedir cambios** conserva el commit y lanza otra vuelta implementer → validator con tu feedback, que acaba en un commit `fix: address review of <id>`.
+1. **Abrir proyecto…**: selecciona la raíz Git con el selector nativo de macOS. El harness detecta cómo se revisa: **GitHub** si `origin` está en GitHub y `gh` está autenticado; si no, **ramas locales**. `HARNESS_REVIEW=local|github` lo fuerza.
+2. Marca las features pendientes. Al marcar una se añaden sus dependencias; al desmarcarla se quitan las que dependían de ella.
+3. **Ejecutar selección** muestra el orden y lanza la cola. Las features cuyas dependencias ya están integradas avanzan **en paralelo** (`HARNESS_PARALLEL`, 3 por defecto).
+4. Cada feature trabaja en su propia rama `feat/<id>` y su propio worktree, creados desde la base actual (`origin/<base>` recién descargada en GitHub). Tu checkout no se toca. Se copian `.env`, `.env.local` y `.env.test` si existen; dependencias y puertos siguen siendo cosa del proyecto.
+5. Abre una tarjeta (panel lateral; `Esc` lo cierra y `#<id>` enlaza a ella) para ver rol, skill, actividad de Pi, evidencia, correcciones, archivos y cómo probarlo.
+6. El validator puede aceptar, pedir correcciones o bloquear. Las correcciones vuelven al implementer y se validan otra vez (máximo tres por intento).
+7. Tras la aceptación independiente, el host hace el commit en la rama y la publica para **revisión humana**: en GitHub hace push y abre una PR con resumen, evidencia y cómo probarlo; en local la rama queda lista para integrar.
+8. **Mergear PR** (squash con `gh`) o **Integrar en <base>** (merge `--no-ff` en tu checkout, que debe estar limpio y en la base) completa la feature. También puedes mergear en GitHub: el tablero consulta las PR cada 20 s (o con **Comprobar PRs**).
+9. **Pedir cambios** conserva la rama y la PR y lanza otra vuelta implementer → validator con tu feedback. Acaba en un commit `fix: address review of <id>` en la misma PR, con tu feedback como comentario.
 
-Una dependencia solo cuenta cuando está `accepted` **y** has aprobado su revisión humana: nada se construye sobre un commit que no has revisado. Mientras tanto la cola espera sin bloquearse.
+Una dependencia solo cuenta cuando está **integrada** en la base: nada se construye sobre un cambio que no has revisado. Mientras tanto sus dependientes esperan en cola.
 
-**Pausar cola** deja terminar la feature actual. **Detener ejecución** interrumpe el rol y pausa la cola. **Continuar desde este paso** conserva la baseline y los resultados anteriores. **Quitar de la cola** no borra ni revierte archivos.
+Al integrar una feature, las demás ramas en revisión se actualizan con la base. Los conflictos de estado en `feature_list.json` (fusión por id) y `PROGRESS.md` (unión) se resuelven solos; cualquier otro conflicto se marca en la tarjeta para que lo resuelvas en la rama.
+
+**Pausar cola** deja terminar lo que está en marcha. **Detener ejecución** interrumpe ese rol; el resto sigue. **Continuar desde este paso** conserva baseline y resultados. **Quitar de la cola** conserva rama y worktree para que los revises.
 
 ## Fuente de verdad
 
@@ -76,20 +80,19 @@ El antiguo `.harness/config.json` es opcional y solo se valida si existe; no sel
 - Estado, cola, roles, evidencia y aceptación se guardan atómicamente en `.harness-data/state.json`, fuera del repositorio objetivo. `HARNESS_STATE_PATH` permite otra ubicación. No borres ese estado durante una ejecución.
 - Al reiniciar, las ejecuciones activas pasan a interrumpidas y la cola queda pausada. Pi se detiene si desaparece su proceso servidor. No se continúa trabajo sin acción explícita.
 - Una especificación existente sin prueba de actualidad se revisa con planner. Una feature `passing` con spec pasa a validación independiente.
-- Se conserva el trabajo previo ajeno. Si el inventario o `PROGRESS.md` ya tienen cambios, hay archivos staged, cambia HEAD/rama o el diff no se puede aislar, se bloquea el commit. No hay reset ni rollback automático.
+- Los worktrees viven en `.harness-data/worktrees/`. Se borran (sin forzar) al integrar o cerrar la revisión; ramas y PR se conservan. Si en un worktree hay archivos staged, cambia HEAD/rama o el diff no se puede aislar, se bloquea el commit. No hay reset ni rollback automático.
 - Si falla un hook o la firma de commit, los archivos quedan disponibles para inspección; no se desactiva ese control automáticamente. Resuelve el problema antes de continuar.
-- El servidor solo comprueba si `DEVEXPERT_API_KEY` está presente en su entorno (nunca lee su valor) y avisa en la UI si falta.
 - La UI vive en `public/` (módulos ES sin build). El estado se consulta cada 1,2 s con ETag; la vista solo se redibuja por regiones cuando algo cambia.
 - El servidor escucha solo en loopback. Rechaza mutaciones desde otros orígenes. No expongas este servidor a Internet.
 
 ## Verificación
 
 ```sh
-pnpm check          # Fixtures Git desechables, sin proveedor ni producto real
+pnpm check          # Fixtures Git desechables, sin proveedor, sin red y sin GitHub real
 pnpm check:pi       # Protocolo RPC local, sin inferencia
 
 # Opt-in: consume una ejecución real. Copia skills/roles, no modifica el origen.
 HARNESS_SOURCE_PROJECT=/ruta/al/proyecto ~/.local/bin/oprun pnpm check:pi:e2e
 ```
 
-Las pruebas cubren roles reales del adaptador, ciclo de reparación, revisión humana (aprobar y pedir cambios), aceptación/commit, recuperación de escrituras interrumpidas, preservación de WIP, cola/dependencias, cancelación, persistencia, errores de proveedor, API HTTP y el modelo de vista de la UI. La prueba real usa una feature mínima en un repositorio temporal y conserva su ruta para inspección.
+Las pruebas cubren roles reales del adaptador, ciclo de reparación, paralelo con worktrees, revisión humana (integrar, sincronizar ramas y pedir cambios), adaptador de GitHub con gh simulado, API key, aceptación/commit, recuperación de escrituras interrumpidas, preservación de WIP, cola/dependencias, cancelación, persistencia, errores de proveedor, API HTTP y el modelo de vista de la UI. La prueba real usa una feature mínima en un repositorio temporal y conserva su ruta para inspección.

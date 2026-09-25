@@ -37,10 +37,14 @@ function setFocused(id) {
 function renderRuntime() {
   const { runtime, pi } = state;
   const model = pi.modelOverride ? `${pi.provider}/${pi.modelOverride}` : 'modelo del rol';
+  const review = state.review;
+  const reviewLabel = review?.mode === 'github' ? `PR en GitHub → ${review.base}` : review?.mode === 'local' ? `Ramas locales → ${review.base}` : 'Revisión sin configurar';
   patch($('runtime-strip'), html`
     <span class="${runtime.ready ? 'ok' : 'bad'}">${runtime.ready ? '✓ Configuración válida' : '✕ Configuración incompleta'}</span>
     ${runtime.roles.length ? html`<span>${runtime.roles.map((role) => role.name).join(' → ')}</span>` : ''}
     <span>${model}</span>
+    <span>${reviewLabel}</span>
+    <span>Hasta ${state.maxParallel} en paralelo</span>
     <span>Pi ${pi.version ?? 'no instalado'}</span>
     <span class="warn" title="${runtime.notice}">⚠ Sin sandbox de Codex</span>
     <button class="link" id="runtime-details">Detalles</button>`);
@@ -49,13 +53,13 @@ async function showRuntime() {
   const { runtime, pi } = state;
   await ask($('dialog'), { title: 'Harness del proyecto', confirm: 'Entendido', body: html`
     <p>${runtime.error ?? runtime.notice}</p>
-    <p>Motor: Pi ${pi.version ?? 'no instalado'}${pi.modelOverride ? ` · modelo fijado ${pi.provider}/${pi.modelOverride}` : ''}${pi.credentials === false ? ' · falta DEVEXPERT_API_KEY' : ''}</p>
+    <p>Motor: Pi ${pi.version ?? 'no instalado'}${pi.modelOverride ? ` · modelo fijado ${pi.provider}/${pi.modelOverride}` : ''}${pi.credentials && !pi.credentials.configured ? ' · falta la API key' : ''}</p>
     ${runtime.roles.length ? html`<table class="roles"><thead><tr><th>Rol</th><th>Skill</th><th>Modelo</th><th>Esfuerzo</th></tr></thead><tbody>${runtime.roles.map((role) => html`<tr><td><code>${role.name}</code></td><td><code>${role.skill}</code></td><td>${pi.modelOverride ?? role.model}</td><td>${role.thinking}</td></tr>`)}</tbody></table>` : ''}
-    <p class="muted">Las ejecuciones modifican el repositorio y crean un commit local tras la aceptación independiente. Nunca hacen push, deploy ni merge. Pausar deja terminar la feature actual; detener interrumpe el rol.</p>` });
+    <p class="muted">Cada feature trabaja en su propio worktree y rama <code>feat/&lt;id&gt;</code>. Tras la aceptación independiente se publica para revisión humana (PR en GitHub o rama local). El harness solo integra cuando tú lo pides. Pausar deja terminar lo que está en marcha; detener interrumpe ese rol.</p>` });
 }
 
 function render() {
-  patch($('notices'), html`${notices(state, { online }).map((item) => html`<p class="notice ${item.level}" role="alert">${item.text}</p>`)}`);
+  patch($('notices'), html`${notices(state, { online }).map((item) => html`<p class="notice ${item.level}" role="alert">${item.text}${item.action ? html` <button class="link" data-notice-action="${item.action}">${item.actionLabel}</button>` : ''}</p>`)}`);
   if (!state) return;
   const project = state.project;
   $('project-name').textContent = project?.name ?? (state.projectPath ? 'No se pudo cargar el proyecto' : 'Abre un proyecto');
@@ -85,7 +89,12 @@ function render() {
   $('detail').hidden = !task;
   $('scrim').hidden = !task;
   document.body.classList.toggle('with-detail', Boolean(task));
-  if (task) patch($('detail'), renderDetail(task, { all, busy }));
+  if (task) patch($('detail'), renderDetail(task, { all, busy, review: state.review }));
+  const key = state.pi.credentials;
+  $('credentials').hidden = !key;
+  $('credentials').textContent = key?.configured ? { env: 'API key · entorno', ui: 'API key · esta sesión', saved: 'API key · guardada' }[key.source] : 'Configurar API key';
+  $('credentials').classList.toggle('attention', Boolean(key && !key.configured));
+  $('check-reviews').hidden = state.review?.mode !== 'github' || !state.runs.some((run) => run.status === 'review');
 }
 
 async function mutate(path, body) {
@@ -107,13 +116,33 @@ $('open').addEventListener('click', async () => {
   if (ok && state?.project) flash(`${state.project.tasks.length} features cargadas desde feature_list.json.`);
   else if (ok) flash('');
 });
+async function configureCredentials() {
+  const current = state?.pi.credentials;
+  const answer = await ask($('dialog'), { title: 'API key de DevExpert Inference', confirm: 'Comprobar y guardar', body: html`
+    <p>Pi la usa para llamar al modelo <code>chat</code>. Se comprueba contra DevExpert Inference y nunca se vuelve a mostrar en el navegador.</p>
+    ${current?.source === 'env' ? html`<p class="muted">Ahora mismo se usa la del entorno del servidor. La que escribas aquí tiene prioridad.</p>` : ''}`,
+  input: { type: 'password', label: 'API key', placeholder: 'sk-…' }, checkbox: { label: 'Recordarla en este equipo (archivo local con permisos 600)' } });
+  if (answer?.value && await mutate('/api/credentials', { apiKey: answer.value, remember: answer.checked })) flash('API key comprobada. Pi ya puede ejecutar los roles.');
+}
+$('credentials').addEventListener('click', async () => {
+  if (!state?.pi.credentials?.configured || state.pi.credentials.source === 'env') return configureCredentials();
+  const choice = await ask($('dialog'), { title: 'API key configurada', confirm: 'Cambiar clave', body: html`<p>${state.pi.credentials.source === 'saved' ? 'Está guardada en este equipo.' : 'Solo está en memoria: se olvida al reiniciar el servidor.'}</p><p><button class="link" data-forget>Olvidar la clave</button></p>` });
+  if (choice) await configureCredentials();
+});
+$('dialog').addEventListener('click', async (event) => {
+  if (!event.target.closest('[data-forget]')) return;
+  $('dialog').close('cancel');
+  if (await mutate('/api/credentials/clear')) flash('Clave olvidada.');
+});
+$('notices').addEventListener('click', (event) => { if (event.target.closest('[data-notice-action=credentials]')) void configureCredentials(); });
+$('check-reviews').addEventListener('click', () => mutate('/api/reviews/refresh'));
 $('pause').addEventListener('click', () => mutate(`/api/queue/${state.paused ? 'resume' : 'pause'}`));
 $('execute').addEventListener('click', async () => {
   const ordered = executionOrder(selection, tasks(state));
   const confirmed = await ask($('dialog'), { title: `Ejecutar ${ordered.length} feature(s)`, confirm: 'Ejecutar', body: html`
     <p>Se ejecutarán en este orden en <strong>${state.project.name}</strong>, una cada vez:</p>
     <ol class="order">${ordered.map((task) => html`<li><code>${task.id}</code> ${task.title}</li>`)}</ol>
-    <p class="muted">Pi modificará archivos del repositorio y hará un commit local por cada feature aceptada. Las dependientes esperan a que apruebes la revisión. Sin push ni merge.</p>` });
+    <p class="muted">Las independientes avanzan a la vez, cada una en su worktree. Al aceptarse, cada una queda en revisión humana (${state.review?.mode === 'github' ? 'una PR' : 'una rama local'}). Las dependientes esperan a que la integres.</p>` });
   if (confirmed && await mutate('/api/queue', { taskIds: ordered.map((task) => task.id) })) { selection.clear(); render(); }
 });
 $('runtime-strip').addEventListener('click', (event) => { if (event.target.closest('#runtime-details')) void showRuntime(); });
@@ -149,8 +178,13 @@ $('detail').addEventListener('click', async (event) => {
       <p>Se conserva el commit actual. El implementer recibirá tu feedback, el validator volverá a revisar y se hará un commit de corrección.</p>`,
     input: { label: '¿Qué hay que cambiar?', placeholder: 'Describe qué falla o qué esperabas ver…', maxLength: 4000 } });
     if (feedback && await mutate(path, { feedback })) flash('Cambios enviados. La feature vuelve a la cola.');
-  } else if (action === 'reviewed') {
-    if (await mutate(path)) flash('Revisión aprobada. Las features que dependían de esta pueden continuar.');
+  } else if (action === 'merge') {
+    const run = state.runs.find((item) => item.id === button.dataset.run);
+    const github = state.review?.mode === 'github';
+    const ok = await ask($('dialog'), { title: github ? `Mergear PR #${run.pr?.number}` : `Integrar ${run.branch}`, confirm: github ? 'Mergear (squash)' : 'Integrar', body: html`
+      <p>${github ? html`Se hará squash merge de la PR contra <code>${state.review.base}</code> con tu cuenta de <code>gh</code>. También puedes mergearla desde GitHub: el tablero lo detecta.` : html`Se hará un merge <code>--no-ff</code> de <code>${run.branch}</code> en <code>${state.review?.base}</code> en tu repositorio.`}</p>
+      <p class="muted">Antes se actualiza la rama con la base. Después, las features que dependen de esta pueden empezar.</p>` });
+    if (ok && await mutate(path)) flash('Integrada. Las features que dependían de esta ya pueden continuar.');
   } else await mutate(path);
 });
 

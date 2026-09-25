@@ -9,6 +9,7 @@ import { StateStore } from './harness/state-store.mjs';
 import { FeatureQueue } from './harness/queue.mjs';
 import { acquireServerLock } from './harness/server-lock.mjs';
 import { piOptions as configuredPiOptions } from './harness/pi-config.mjs';
+import { Credentials, verifyKey } from './harness/credentials.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const publicRoot = join(root, 'public');
@@ -36,7 +37,7 @@ async function readJson(request) {
   try { return body ? JSON.parse(body) : {}; } catch { throw new RequestError(400, 'El cuerpo no es JSON válido'); }
 }
 
-export function createHarnessServer({ statePath = process.env.HARNESS_STATE_PATH ?? join(root, '.harness-data/state.json'), select = chooseProject, executor, piVersion, piOptions = {} } = {}) {
+export function createHarnessServer({ statePath = process.env.HARNESS_STATE_PATH ?? join(root, '.harness-data/state.json'), select = chooseProject, executor, piVersion, piOptions = {}, env = process.env, verify = verifyKey, queueOptions = {} } = {}) {
   const release = acquireServerLock(statePath);
   const options = { ...configuredPiOptions(), ...piOptions };
   if (piVersion === undefined) {
@@ -44,9 +45,9 @@ export function createHarnessServer({ statePath = process.env.HARNESS_STATE_PATH
     piVersion = detection.status === 0 ? detection.stdout.trim() : null;
   }
   let queue;
-  // Presence only: the harness never reads or stores the key's value.
-  const credentials = options.provider === 'devexpert' ? Boolean(process.env.DEVEXPERT_API_KEY) : null;
-  try { queue = new FeatureQueue({ store: new StateStore(statePath), executor, piVersion, piOptions: options, credentials }); }
+  const credentials = new Credentials({ path: join(dirname(statePath), 'credentials.json'), env });
+  const maxParallel = Math.max(1, Math.min(8, Number(env.HARNESS_PARALLEL ?? 3) || 3));
+  try { queue = new FeatureQueue({ store: new StateStore(statePath), executor, piVersion, piOptions: options, credentials, maxParallel, ...queueOptions }); }
   catch (error) { release(); throw error; }
   let selecting = false;
   const server = createServer(async (request, response) => {
@@ -80,9 +81,17 @@ export function createHarnessServer({ statePath = process.env.HARNESS_STATE_PATH
         queue.enqueue(body.taskIds);
         return json(response, 202, queue.snapshot());
       }
+      if (request.method === 'POST' && url.pathname === '/api/credentials') {
+        if (typeof body.apiKey !== 'string') throw new RequestError(400, 'Falta la API key');
+        await verify(body.apiKey);
+        credentials.set(body.apiKey, body.remember === true);
+        return json(response, 200, queue.snapshot());
+      }
+      if (request.method === 'POST' && url.pathname === '/api/credentials/clear') { credentials.clear(); return json(response, 200, queue.snapshot()); }
+      if (request.method === 'POST' && url.pathname === '/api/reviews/refresh') { queue.refreshReviews(); return json(response, 200, queue.snapshot()); }
       if (request.method === 'POST' && url.pathname === '/api/queue/pause') { queue.pause(); return json(response, 200, queue.snapshot()); }
       if (request.method === 'POST' && url.pathname === '/api/queue/resume') { queue.resume(); return json(response, 200, queue.snapshot()); }
-      const match = url.pathname.match(/^\/api\/runs\/([\w-]+)\/(stop|retry|discard|reviewed|reject)$/);
+      const match = url.pathname.match(/^\/api\/runs\/([\w-]+)\/(stop|retry|discard|merge|reject)$/);
       if (request.method === 'POST' && match) { queue.action(match[1], match[2], body); return json(response, 200, queue.snapshot()); }
       const path = request.method === 'GET' ? publicFile(url.pathname) : null;
       if (path) {
@@ -99,8 +108,9 @@ export function createHarnessServer({ statePath = process.env.HARNESS_STATE_PATH
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { server, queue } = createHarnessServer();
+  queue.watchReviews();
   const port = Number(process.env.PORT ?? 4173);
-  server.listen(port, '127.0.0.1', () => console.log(`Harness en http://localhost:${port} · Pi · feature-flow · WIP 1`));
+  server.listen(port, '127.0.0.1', () => console.log(`Harness en http://localhost:${port} · Pi · feature-flow · hasta ${queue.maxParallel} en paralelo`));
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, async () => {
     await queue.close();
     server.close();

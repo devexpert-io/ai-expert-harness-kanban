@@ -5,27 +5,32 @@ export const stages = [
 ];
 export const activeStatuses = ['queued', 'running', 'blocked', 'interrupted'];
 export const attentionStatuses = ['blocked', 'interrupted'];
+const inactive = ['discarded', 'closed'];
 
-/** Tasks joined with their latest meaningful run and the run history for that task. */
+/**
+ * Tasks joined with their latest meaningful run. A merged run makes the feature accepted even when
+ * the local checkout has not pulled the base yet (GitHub reviews).
+ */
 export function tasks(state) {
   const runs = state?.runs ?? [];
   return (state?.project?.tasks ?? []).map((task) => {
     const history = runs.filter((run) => run.taskId === task.id);
-    const run = [...history].reverse().find((item) => item.status !== 'discarded');
-    const live = run && !['done', 'changes-requested'].includes(run.status);
-    return { ...task, run, history, live: Boolean(live), state: live ? run.stage : task.state };
+    const run = [...history].reverse().find((item) => !inactive.includes(item.status));
+    const live = Boolean(run) && !['done', 'changes-requested'].includes(run.status);
+    const merged = run?.status === 'done';
+    const settled = run ? merged : task.sourceStatus === 'accepted';
+    return { ...task, run, history, live, settled, sourceStatus: merged ? 'accepted' : task.sourceStatus, gate: merged ? 'Integrada' : task.gate, state: live ? run.stage : merged ? 'done' : task.state };
   });
 }
 export const byId = (all) => new Map(all.map((task) => [task.id, task]));
 
 export function selectable(task) {
-  return task.sourceStatus !== 'accepted' && !task.blocked && !task.live;
+  return !task.settled && task.sourceStatus !== 'accepted' && !task.blocked && !task.live;
 }
 
 /** Dependencies not yet usable, split by whether the human review is the only thing missing. */
 export function waiting(task, index) {
-  const blockers = task.dependsOn.map((id) => index.get(id)).filter(Boolean).filter((dependency) =>
-    dependency.sourceStatus !== 'accepted' || dependency.live);
+  const blockers = task.dependsOn.map((id) => index.get(id)).filter(Boolean).filter((dependency) => !dependency.settled);
   return {
     review: blockers.filter((dependency) => dependency.run?.status === 'review').map((dependency) => dependency.id),
     other: blockers.filter((dependency) => dependency.run?.status !== 'review').map((dependency) => dependency.id)
@@ -82,24 +87,27 @@ export function notices(state, { online }) {
   if (!state.project) return items;
   if (!state.runtime.ready) items.push({ level: 'error', text: `El backlog está cargado, pero no se puede ejecutar: ${state.runtime.error}` });
   if (!state.pi.installed) items.push({ level: 'error', text: 'El backlog está cargado. Instala Pi para poder ejecutar las features.' });
-  if (state.pi.credentials === false) items.push({ level: 'warn', text: 'El servidor no tiene DEVEXPERT_API_KEY en su entorno. Arráncalo con oprun o los roles fallarán al llamar al proveedor.' });
+  if (state.pi.credentials && !state.pi.credentials.configured) items.push({ level: 'warn', text: 'Falta la API key de DevExpert Inference. Configúrala para que Pi pueda ejecutar los roles.', action: 'credentials', actionLabel: 'Configurar API key' });
+  if (state.review?.error) items.push({ level: 'error', text: state.review.error });
   return items;
 }
 
 export function queueSummary(state, all) {
-  const active = all.find((task) => task.run?.status === 'running');
+  const running = all.filter((task) => task.run?.status === 'running');
   const queued = state.runs.filter((run) => run.status === 'queued');
-  const blocked = state.runs.find((run) => attentionStatuses.includes(run.status));
+  const blocked = state.runs.filter((run) => attentionStatuses.includes(run.status));
   const reviews = all.filter((task) => task.run?.status === 'review');
   const index = byId(all);
-  const waitingReview = queued.length && !active && !blocked && queued.every((run) => index.get(run.taskId) && waiting(index.get(run.taskId), index).review.length);
-  if (active) return { tone: 'live', label: `${active.title} · ${active.run.role ?? 'preparando'}`, help: `${active.run.events.at(-1)?.message ?? 'Preparando ejecución…'}${queued.length ? ` · ${queued.length} en espera` : ''}` };
-  if (blocked) return { tone: 'error', label: 'La ejecución necesita atención', help: blocked.error ?? '' };
-  if (waitingReview) return { tone: 'review', label: 'La cola espera tu revisión', help: `Revisa ${reviews.map((task) => task.id).join(', ')} para continuar con ${queued.length} feature(s) dependiente(s).` };
-  if (queued.length) return { tone: state.paused ? 'idle' : 'live', label: state.paused ? `Cola pausada · ${queued.length} en espera` : `${queued.length} en cola`, help: state.paused ? 'La feature actual terminó. Reanuda para continuar.' : 'Preparando la siguiente feature…' };
-  if (reviews.length) return { tone: 'review', label: `${reviews.length} pendiente(s) de tu revisión`, help: 'Abre la tarjeta para ver el commit, cómo probarlo y aprobar o pedir cambios.' };
-  const pending = all.filter((task) => task.sourceStatus !== 'accepted').length;
-  return { tone: 'idle', label: pending ? `${pending} features pendientes` : 'Todo aceptado', help: pending ? 'Marca las features que quieres implementar. Sus dependencias se añaden solas y se respeta el orden.' : 'No quedan features por implementar en feature_list.json.' };
+  const waitingReview = queued.filter((run) => index.get(run.taskId) && waiting(index.get(run.taskId), index).review.length);
+  const extra = [queued.length && `${queued.length} en cola`, reviews.length && `${reviews.length} en revisión`, blocked.length && `${blocked.length} necesita(n) atención`].filter(Boolean).join(' · ');
+  if (running.length === 1) return { tone: 'live', label: `${running[0].title} · ${running[0].run.role ?? 'preparando'}`, help: `${running[0].run.events.at(-1)?.message ?? 'Preparando ejecución…'}${extra ? ` · ${extra}` : ''}` };
+  if (running.length) return { tone: 'live', label: `${running.length} features en paralelo`, help: `${running.map((task) => `${task.id} · ${task.run.role ?? 'preparando'}`).join(' · ')}${extra ? ` · ${extra}` : ''}` };
+  if (blocked.length && !queued.length) return { tone: 'error', label: 'Una ejecución necesita atención', help: blocked[0].error ?? '' };
+  if (queued.length && waitingReview.length === queued.length) return { tone: 'review', label: 'La cola espera tu revisión', help: `Integra ${reviews.map((task) => task.id).join(', ')} para continuar con ${queued.length} feature(s) dependiente(s).` };
+  if (queued.length) return { tone: state.paused ? 'idle' : 'live', label: state.paused ? `Cola pausada · ${queued.length} en espera` : `${queued.length} en cola`, help: state.paused ? 'Lo que estaba en marcha ha terminado. Reanuda para continuar.' : 'Preparando las siguientes features…' };
+  if (reviews.length) return { tone: 'review', label: `${reviews.length} pendiente(s) de tu revisión`, help: state.review?.mode === 'github' ? 'Revisa cada PR en GitHub; al mergearla, el tablero lo detecta y desbloquea sus dependientes.' : 'Abre la tarjeta para ver la rama, cómo probarla e integrarla o pedir cambios.' };
+  const pending = all.filter((task) => !task.settled).length;
+  return { tone: 'idle', label: pending ? `${pending} features pendientes` : 'Todo integrado', help: pending ? `Marca las features que quieres implementar. Las independientes avanzan a la vez (hasta ${state.maxParallel ?? 1}); sus dependencias se añaden solas.` : 'No quedan features por implementar en feature_list.json.' };
 }
 
 export const repairs = (run) => (run?.steps ?? []).filter((step) => step.verdict === 'revise').length;
