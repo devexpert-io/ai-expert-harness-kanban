@@ -88,7 +88,7 @@ button.icon { width: 36px; height: 36px; padding: 0; font-size: 15px }
 .board { display: grid; grid-template-columns: repeat(6, minmax(190px, 1fr)); gap: 14px; min-height: 320px }
 .board-empty { grid-column: 1 / -1; text-align: center; color: var(--muted); padding: 60px 0 }
 .column { border-radius: 12px; padding: 0 6px 10px }
-.column h2 { font-size: 12px; font-weight: 580; color: var(--muted); display: flex; gap: 8px; align-items: center; padding: 10px 2px 13px; border-bottom: 2px solid var(--line); margin-bottom: 14px; white-space: nowrap }
+.column h2 { font-size: 12px; font-weight: 580; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 10px 2px 13px; border-bottom: 2px solid var(--line); margin-bottom: 14px; white-space: nowrap }
 .column .count { font-size: 11px; background: var(--surface-2); padding: 3px 6px; border-radius: 5px }
 .column[data-stage=planning] h2, .column[data-stage=implementing] h2, .column[data-stage=validating] h2 { border-color: color-mix(in srgb, var(--live) 55%, transparent) }
 .column[data-stage=review] h2 { border-color: var(--review) }
