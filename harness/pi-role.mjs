@@ -30,6 +30,10 @@ export function buildPiPrompt({ task, role, repairBrief, humanFeedback, baseline
   ].filter(Boolean).join('\n\n');
 }
 
+export function resultReminder(role, problem) {
+  return `Tu respuesta final no se puede usar: ${problem}. No repitas el trabajo ni cambies archivos. Responde solo con un único bloque <harness-result>{...}</harness-result> con el contrato de tu rol (${role}), con lo que ya has hecho y comprobado.`;
+}
+
 export function parseRoleResult(text, role) {
   const matches = [...text.matchAll(/<harness-result>\s*([^]*?)\s*<\/harness-result>/g)];
   if (matches.length !== 1) throw new Error(`${role}: falta un único resultado estructurado; no se avanzará de fase`);
@@ -102,6 +106,8 @@ export async function runPiRole({ task, role, runtime, cwd, emit = () => {}, sig
     let finalText = '';
     let stderr = '';
     let agentError = null;
+    let reminded = false;
+    let report = '';
     const decoder = new StringDecoder('utf8');
     let buffer = '';
     const finish = (error, result) => {
@@ -111,7 +117,7 @@ export async function runPiRole({ task, role, runtime, cwd, emit = () => {}, sig
       signal?.removeEventListener('abort', abort);
       if (child.pid && process.platform !== 'win32') { try { process.kill(-child.pid, 'SIGKILL'); } catch {} }
       else child.kill();
-      error ? reject(error) : resolve({ ...result, output: finalText });
+      error ? reject(error) : resolve({ ...result, output: report ? `${report}\n\n${finalText}` : finalText });
     };
     const abort = () => finish(new Error('Ejecución cancelada; la cola está pausada'));
     const timeout = setTimeout(() => finish(new Error(`Pi excedió ${Math.round(timeoutMs / 60_000)} minutos; se ha detenido`)), timeoutMs);
@@ -132,7 +138,15 @@ export async function runPiRole({ task, role, runtime, cwd, emit = () => {}, sig
       }
       if (event.type === 'agent_settled') {
         if (agentError) return finish(agentError);
-        try { finish(null, parseRoleResult(finalText, role.name)); } catch (error) { finish(error); }
+        try { finish(null, parseRoleResult(finalText, role.name)); } catch (error) {
+          // A role that did the work but forgot the handoff gets one reminder in the same session.
+          if (reminded) return finish(error);
+          reminded = true;
+          report = finalText;
+          emit({ stage: roleStages[role.name], role: role.name, skill: role.skillName, level: 'warn', message: `${role.name} no devolvió <harness-result>; el host se lo pide una vez` });
+          // Deferred so the reminder never re-enters the stdout handler that is still parsing this line.
+          setImmediate(() => { if (!finished) child.stdin.write(`${JSON.stringify({ id: `${task.id}-${role.name}-result`, type: 'prompt', message: resultReminder(role.name, error.message) })}\n`); });
+        }
       }
     };
     child.stdout.on('data', (chunk) => {

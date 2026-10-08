@@ -15,7 +15,8 @@ function fakeSpawn(records, inspect = () => {}) {
     const child = new EventEmitter();
     child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
     child.kill = () => {};
-    queueMicrotask(() => { for (const event of records) child.stdout.write(`${JSON.stringify(event)}\n`); });
+    // Like Pi, it answers every prompt it receives (including the host's reminder).
+    child.stdin.on('data', () => setImmediate(() => { for (const event of records) child.stdout.write(`${JSON.stringify(event)}\n`); }));
     return child;
   };
 }
@@ -88,4 +89,41 @@ test('un rol de OpenCode arranca con su extensión de permisos y sin las herrami
   assert.equal(seen.args[seen.args.indexOf('--tools') + 1], 'read,write,edit,grep,find,ls');
   assert.ok(seen.args.some((arg) => arg.endsWith('opencode-permissions.mjs')));
   assert.equal(seen.env.HARNESS_ROLE, 'planner');
+});
+test('si el rol olvida <harness-result>, el host se lo pide una vez en la misma sesión', async () => {
+  const report = { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'Implementer report: todo hecho.' }] } };
+  const handoff = { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: `<harness-result>${JSON.stringify(result)}</harness-result>` }] } };
+  const prompts = [];
+  const events = [];
+  const spawnImpl = () => {
+    const child = new EventEmitter();
+    child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+    child.kill = () => {};
+    child.stdin.on('data', (chunk) => {
+      for (const line of chunk.toString().split('\n').filter(Boolean)) {
+        prompts.push(JSON.parse(line).message);
+        for (const event of [prompts.length === 1 ? report : handoff, { type: 'agent_settled' }]) child.stdout.write(`${JSON.stringify(event)}\n`);
+      }
+    });
+    return child;
+  };
+  const actual = await runPiRole({ task, role, runtime, cwd: '/tmp', spawnImpl, emit: (event) => events.push(event) });
+  assert.equal(actual.outcome, 'passing');
+  assert.equal(prompts.length, 2);
+  assert.match(prompts[1], /No repitas el trabajo/);
+  assert.match(actual.output, /Implementer report[^]*<harness-result>/);
+  assert.ok(events.some((event) => event.level === 'warn' && /se lo pide una vez/.test(event.message)));
+});
+test('si tampoco lo devuelve tras el recordatorio, el rol falla sin avanzar', async () => {
+  const report = { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'Sin bloque.' }] } };
+  let prompts = 0;
+  const spawnImpl = () => {
+    const child = new EventEmitter();
+    child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+    child.kill = () => {};
+    child.stdin.on('data', () => { prompts++; for (const event of [report, { type: 'agent_settled' }]) child.stdout.write(`${JSON.stringify(event)}\n`); });
+    return child;
+  };
+  await assert.rejects(runPiRole({ task, role, runtime, cwd: '/tmp', spawnImpl }), /falta un único resultado estructurado/);
+  assert.equal(prompts, 2);
 });
