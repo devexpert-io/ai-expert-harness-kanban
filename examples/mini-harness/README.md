@@ -4,6 +4,7 @@ El Kanban de este repositorio, reducido a lo esencial en cinco pasos cortos. Cad
 
 | Paso | Archivo | Idea |
 |---|---|---|
+| 0 | `00-rpc-a-mano.sh` | Práctica 1: Pi en modo RPC dentro de tu fork, con los eventos de streaming ocultos. Pegas una línea JSON y ves pasar herramientas y respuesta. |
 | 1 | `pi.mjs`, `01-un-rol.mjs` | Un agente es un proceso: JSON por stdin, eventos JSON por stdout. Lanzamos un rol con sus instrucciones y su skill, y leemos `<harness-result>`. |
 | 2 | `02-el-loop.mjs` | Planner → implementer → validator. Quién va después lo decide el código; `revise` vuelve al implementer, con un límite. |
 | 3 | `03-la-cola.mjs` | La siguiente feature sale de `feature_list.json` y sus dependencias. El host marca `accepted` y hace el commit… con `git add -A`, que mete cualquier cosa. |
