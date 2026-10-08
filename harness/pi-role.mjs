@@ -3,6 +3,9 @@ import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
 import { roleStages } from './project-runtime.mjs';
 import { pinnedPi, providerExtension } from './pi-config.mjs';
+import { piTools } from './opencode-permissions.mjs';
+
+const permissionsExtension = fileURLToPath(new URL('./opencode-permissions.mjs', import.meta.url));
 
 export function buildPiPrompt({ task, role, repairBrief, humanFeedback, baseline, files = [] }) {
   const schema = role.name === 'validator'
@@ -87,6 +90,12 @@ export async function runPiRole({ task, role, runtime, cwd, emit = () => {}, sig
     '--skill', role.skill.path, '--append-system-prompt', system, '--model', model ?? role.model, '--thinking', role.thinking];
   if (provider) args.push('--provider', provider);
   if (provider === pinnedPi.provider) args.push('--extension', providerExtension);
+  // OpenCode roles carry permissions: drop the tools they deny outright and enforce the rest per call.
+  args.push('--tools', piTools(role.permissions).join(','));
+  if (role.permissions) {
+    args.push('--extension', permissionsExtension);
+    env = { ...env, HARNESS_ROLE: role.name };
+  }
   return new Promise((resolve, reject) => {
     const child = spawnImpl(process.execPath, [fileURLToPath(new URL('./pi-supervisor.mjs', import.meta.url)), piBin, ...args], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
     let finished = false;

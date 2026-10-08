@@ -21,12 +21,21 @@ test('mini-harness paso 4: cola con dependencias y commits que solo llevan lo de
   assert.equal(git(project, 'status', '--porcelain'), '?? notas.txt');
 });
 
-test('mini-harness paso 5: las features listas avanzan en paralelo en sus worktrees', () => {
+test('mini-harness paso 6: las features listas avanzan en paralelo en sus worktrees', () => {
   const project = fixture([feature('search'), feature('cart'), feature('filters', ['search'])]);
-  const output = step('05-paralelo-y-pr.mjs', project);
+  const output = step('06-paralelo-y-pr.mjs', project);
   assert.match(output, /Listas en paralelo: search, cart/);
   assert.match(git(project, 'branch', '--list', 'feat/*'), /feat\/cart[^]*feat\/search/);
   assert.equal(git(project, 'rev-list', '--count', 'main'), '1');
+});
+
+test('mini-harness paso 5: la extensión de permisos para lo que el planner no puede hacer', () => {
+  const role = '---\nmode: subagent\npermission:\n  edit:\n    "*": deny\n    "docs/specs/*": allow\n  bash: deny\n---\nUse $feature-spec.\n';
+  const enforced = fixture([feature('search')], { format: 'opencode' });
+  const loose = fixture([feature('search')], { format: 'opencode' });
+  for (const project of [enforced, loose]) { writeFileSync(join(project, '.opencode/agents/planner.md'), role); git(project, 'commit', '-qam', 'test: planner permissions'); }
+  assert.match(step('05-el-motor-respeta.mjs', enforced), /bloqueadas por el arnés: 2[^]*Cambios fuera de docs\/specs\/: ninguno/);
+  assert.match(step('05-el-motor-respeta.mjs', loose, '--sin-permisos'), /bloqueadas por el arnés: 0[^]*Cambios fuera de docs\/specs\/: src\/app\/page.tsx/);
 });
 
 test('el Kanban completa una feature con el adaptador Pi real contra el Pi de ensayo', async () => {

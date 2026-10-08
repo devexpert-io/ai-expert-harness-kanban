@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const provider = fileURLToPath(new URL('../../harness/devexpert-provider.mjs', import.meta.url));
+// Paso 5: la extensión que hace que Pi respete los permisos de .opencode/agents/<rol>.md.
+const permissions = fileURLToPath(new URL('../../harness/opencode-permissions.mjs', import.meta.url));
 const skills = { planner: 'feature-spec', implementer: 'feature-implementer', validator: 'feature-validator' };
 
 /** Lo que ya construisteis en los módulos 2–4: AGENTS.md, el subagente y su skill. */
@@ -25,10 +27,12 @@ export function parseResult(text) {
   return JSON.parse(match[1]);
 }
 
-export function runRole({ cwd, role, prompt, onEvent = () => {}, env = process.env }) {
+export function runRole({ cwd, role, prompt, onEvent = () => {}, env = process.env, enforce = false }) {
   const args = ['--mode', 'rpc', '--no-session', '--no-approve', '--no-extensions', '--no-skills', '--no-context-files',
+    '--tools', 'read,bash,edit,write,grep,find,ls',
     '--extension', provider, '--provider', 'devexpert', '--model', 'chat', '--thinking', role.thinking,
     '--skill', role.skillPath, '--append-system-prompt', role.system];
+  if (enforce) { args.push('--extension', permissions); env = { ...env, HARNESS_ROLE: role.name }; }
   const pi = spawn(env.PI_BIN ?? 'pi', args, { cwd, env, stdio: ['pipe', 'pipe', 'inherit'] });
   return new Promise((resolve, reject) => {
     let text = '';
@@ -60,7 +64,10 @@ export function runRole({ cwd, role, prompt, onEvent = () => {}, env = process.e
 export function logEvent(prefix) {
   return (event) => {
     if (event.type === 'tool_execution_start') console.log(`  ${prefix} ▸ ${event.toolName} ${JSON.stringify(event.args).slice(0, 90)}`);
-    if (event.type === 'tool_execution_end' && event.isError) console.log(`  ${prefix} ✕ ${event.toolName} falló`);
+    if (event.type === 'tool_execution_end' && event.isError) {
+      const text = (event.result?.content ?? []).map((part) => part.text ?? '').join(' ');
+      console.log(`  ${prefix} ✕ ${event.toolName} ${/Bloqueado por/.test(text) ? text.slice(text.indexOf('Bloqueado por'), text.indexOf('Bloqueado por') + 140) : 'falló'}`);
+    }
   };
 }
 

@@ -1,5 +1,5 @@
-// Paso 5 · Varias features a la vez, cada una en su worktree, y una PR como revisión humana.
-// node 05-paralelo-y-pr.mjs <proyecto> [--pr]
+// Paso 6 · Varias features a la vez, cada una en su worktree, y una PR como revisión humana.
+// node 06-paralelo-y-pr.mjs <proyecto> [--pr]
 import { execFileSync } from 'node:child_process';
 import { basename, dirname, join } from 'node:path';
 import { completeFeature } from './04-el-host-decide.mjs';

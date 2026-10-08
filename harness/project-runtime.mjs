@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
+import { parsePermissions } from './opencode-permissions.mjs';
 
 export const roleSkills = { planner: 'feature-spec', implementer: 'feature-implementer', validator: 'feature-validator' };
 export const roleStages = { planner: 'planning', implementer: 'implementing', validator: 'validating' };
@@ -72,7 +73,7 @@ function openCodeAgents(projectPath, read) {
     if (!developerInstructions) throw new Error(`Faltan las instrucciones de ${name} en .opencode/agents/${name}.md`);
     if (field('mode') && field('mode') !== 'subagent') throw new Error(`${name} debe ser un subagente (mode: subagent)`);
     if (!developerInstructions.includes(`$${skillName}`) && !new RegExp(`^\\s+${skillName}:\\s*allow`, 'm').test(match[1])) throw new Error(`${name} no usa la skill ${skillName}`);
-    return [name, { model: field('model') ?? null, thinking: field('reasoningEffort') ?? 'medium', configPath: file.path, developerInstructions }];
+    return [name, { model: field('model') ?? null, thinking: field('reasoningEffort') ?? 'medium', configPath: file.path, developerInstructions, permissions: parsePermissions(file.text) }];
   }));
 }
 
@@ -81,6 +82,8 @@ export function runtimeSummary(runtime, error = null) {
     ready: Boolean(runtime), error, fingerprint: runtime?.fingerprint,
     roles: runtime ? Object.values(runtime.roles).map(({ name, model, thinking, skillName }) => ({ name, model, thinking, skill: skillName })) : [],
     format: runtime?.format ?? null,
-    notice: 'Pi ejecuta las instrucciones del proyecto en sesiones separadas. No aplica los permisos de OpenCode ni el sandbox de Codex; solo abre repositorios de confianza.'
+    notice: runtime?.format === 'opencode'
+      ? 'Pi ejecuta cada rol en una sesión separada y aplica los permisos de .opencode/agents con una extensión. No es un sandbox del sistema: solo abre repositorios de confianza.'
+      : 'Pi ejecuta las instrucciones del proyecto en sesiones separadas. No aplica el sandbox de Codex; solo abre repositorios de confianza.'
   };
 }

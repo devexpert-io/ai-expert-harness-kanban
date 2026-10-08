@@ -4,6 +4,7 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { decide, parsePermissions } from '../../harness/opencode-permissions.mjs';
 
 if (process.argv.includes('--version')) { console.log('fake-pi 0.0.0 (ensayo)'); process.exit(0); }
 const delay = Number(process.env.FAKE_PI_DELAY ?? 400);
@@ -12,9 +13,16 @@ const send = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
 const write = (path, text) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, text); };
 const changed = () => execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], { encoding: 'utf8' }).split('\n').filter(Boolean).map((line) => line.slice(3));
 
+// Si nos pasan la extensión de permisos, la aplicamos igual que Pi: antes de cada herramienta.
+const harnessRole = process.env.HARNESS_ROLE;
+const enforced = process.argv.some((arg) => arg.endsWith('opencode-permissions.mjs')) && harnessRole && existsSync(`.opencode/agents/${harnessRole}.md`);
+const permissions = enforced ? parsePermissions(readFileSync(`.opencode/agents/${harnessRole}.md`, 'utf8')) : null;
+
 async function tool(toolName, args, action) {
   send({ type: 'tool_execution_start', toolCallId: `${toolName}-${Date.now()}`, toolName, args });
   await sleep();
+  const reason = permissions && decide(permissions, toolName, args, process.cwd());
+  if (reason) return send({ type: 'tool_execution_end', toolName, isError: true, result: { content: [{ type: 'text', text: `Bloqueado por .opencode/agents/${harnessRole}.md: ${reason}` }] } });
   action?.();
   send({ type: 'tool_execution_end', toolName, isError: false, result: { content: [] } });
 }
@@ -28,6 +36,11 @@ async function play(message) {
   await tool('read', { path: 'AGENTS.md' });
   let result;
   if (role === 'planner') {
+    // El paso 5 le pide saltarse su rol; el planner de ensayo obedece, para que se vea quién lo para.
+    if (message.includes('TODO revisar')) {
+      await tool('edit', { path: 'src/app/page.tsx' }, () => write('src/app/page.tsx', `// TODO revisar\n${existsSync('src/app/page.tsx') ? readFileSync('src/app/page.tsx', 'utf8') : ''}`));
+      await tool('bash', { command: 'pnpm test' });
+    }
     const spec = `docs/specs/${id}.md`;
     await tool('write', { path: spec }, () => write(spec, `# ${id}\n\nEscenario comprobable generado en ensayo.\n`));
     result = { outcome: 'ready', summary: `Spec de ${id} lista`, evidence: ['Spec con escenarios comprobables'], files: [spec] };

@@ -80,3 +80,12 @@ test('ejecución sin override siempre envía devexpert/chat y registra su extens
     assert.match(args[args.indexOf('--extension') + 1], /devexpert-provider\.mjs$/);
   }) });
 });
+test('un rol de OpenCode arranca con su extensión de permisos y sin las herramientas que niega', async () => {
+  const planner = { ...role, name: 'planner', permissions: { bash: 'deny', edit: { '*': 'deny', 'docs/specs/*': 'allow' } } };
+  const records = [{ type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: '<harness-result>{"outcome":"ready","summary":"ok","evidence":["spec"],"files":["docs/specs/example.md"]}</harness-result>' }] } }, { type: 'agent_settled' }];
+  let seen;
+  await runPiRole({ task, role: planner, runtime, cwd: '/tmp', spawnImpl: (binary, args, options) => { seen = { args, env: options.env }; return fakeSpawn(records)(binary, args); } });
+  assert.equal(seen.args[seen.args.indexOf('--tools') + 1], 'read,write,edit,grep,find,ls');
+  assert.ok(seen.args.some((arg) => arg.endsWith('opencode-permissions.mjs')));
+  assert.equal(seen.env.HARNESS_ROLE, 'planner');
+});
