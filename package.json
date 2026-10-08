@@ -8,7 +8,7 @@
     "check": "node --check server.mjs && for f in public/*.js public/ui/*.js examples/mini-harness/*.mjs; do node --check \"$f\" || exit 1; done && node --test test/*.test.mjs",
     "check:pi": "node scripts/check-pi-rpc.mjs",
     "check:pi:e2e": "node scripts/check-pi-execution.mjs",
-    "dev:ensayo": "PI_BIN=examples/mini-harness/fake-pi.mjs FAKE_PI_DELAY=1500 HARNESS_STATE_PATH=.harness-data/ensayo/state.json node server.mjs"
+    "dev:ensayo": "PI_BIN=examples/mini-harness/fake-pi.mjs FAKE_PI_DELAY=1500 HARNESS_REVIEW=local HARNESS_STATE_PATH=.harness-data/ensayo/state.json node server.mjs"
   },
   "engines": {
     "node": ">=22"
