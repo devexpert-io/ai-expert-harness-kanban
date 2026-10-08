@@ -42,14 +42,15 @@ El repositorio debe incluir:
 ```text
 feature_list.json
 AGENTS.md
-.codex/config.toml
-.codex/agents/{planner,implementer,validator}.toml
 .agents/skills/{feature-flow,feature-spec,feature-implementer,feature-validator}/SKILL.md
+# y los subagentes, en uno de estos dos formatos:
+.opencode/agents/{planner,implementer,validator}.md      # OpenCode (la tienda del curso)
+.codex/config.toml + .codex/agents/<rol>.toml            # Codex
 ```
 
-Se leen los `config_file` declarados en `.codex/config.toml`, las instrucciones completas del rol, su modelo, su esfuerzo y la skill correspondiente. Las referencias de las skills permanecen accesibles al agente y se incluyen en la huella de configuración. No se modifica ni copia configuración dentro del proyecto abierto.
+Si existe `.opencode/agents/`, se usa OpenCode: de cada `<rol>.md` se toman las instrucciones (el cuerpo tras el frontmatter) y se comprueba que es `mode: subagent` y que usa la skill de su rol (`$feature-spec`, etc.). Los `permission` de OpenCode no se aplican en Pi; el host comprueba los límites de cada rol por su cuenta. Si no, se leen los `config_file` de `.codex/config.toml` con instrucciones, modelo y esfuerzo. Las referencias de las skills permanecen accesibles al agente y se incluyen en la huella de configuración. No se modifica ni copia configuración dentro del proyecto abierto.
 
-El adaptador admite la estructura TOML de AI Expert: secciones `[agents.<rol>]`, strings simples y `developer_instructions` multiline. Rechaza configuraciones incompatibles en vez de inventar un rol. Cada rol usa una sesión Pi nueva, sin extensiones ni contexto global descubierto; recibe explícitamente las instrucciones y la skill del proyecto y la extensión de proveedor de este harness. Pi **no reproduce el sandbox de Codex**: ejecuta con los permisos del usuario. Usa solo repositorios de confianza y no edites en paralelo los archivos de la feature activa.
+El adaptador rechaza configuraciones incompatibles en vez de inventar un rol. Cada rol usa una sesión Pi nueva, sin extensiones ni contexto global descubierto; recibe explícitamente las instrucciones y la skill del proyecto y la extensión de proveedor de este harness. Pi **no reproduce el sandbox de Codex ni los permisos de OpenCode**: ejecuta con los permisos del usuario. Usa solo repositorios de confianza y no edites en paralelo los archivos de la feature activa.
 
 El modelo de ejecución está fijado explícitamente en **DevExpert Inference → `chat`** para los tres roles (`harness/pi-config.mjs`). Se conservan sus instrucciones, skills y esfuerzo de razonamiento, sin modificar la configuración del proyecto objetivo. La UI muestra el modelo efectivo. Ni `PI_MODEL`, ni `PI_PROVIDER`, ni las credenciales presentes en el entorno cambian esa selección; no hay fallback a OpenAI u otro modelo.
 

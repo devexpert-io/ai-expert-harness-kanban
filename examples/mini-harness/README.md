@@ -1,6 +1,6 @@
 # Mini-harness
 
-El Kanban de este repositorio, reducido a lo esencial en cinco pasos cortos. Cada paso se ejecuta solo y añade una idea al anterior. Usa el mismo arnés que ya tiene el proyecto: `AGENTS.md`, `feature_list.json`, `.codex/agents/*.toml` y `.agents/skills/*`.
+El Kanban de este repositorio, reducido a lo esencial en cinco pasos cortos. Cada paso se ejecuta solo y añade una idea al anterior. Usa el mismo arnés que ya tiene el proyecto: `AGENTS.md`, `feature_list.json`, los subagentes (`.opencode/agents/*.md` en la tienda, o `.codex/agents/*.toml`) y `.agents/skills/*`.
 
 | Paso | Archivo | Idea |
 |---|---|---|

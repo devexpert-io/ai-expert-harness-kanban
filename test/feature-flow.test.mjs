@@ -176,3 +176,21 @@ test('errores de proyecto y Git se explican sin rutas internas ni códigos crudo
   git(detached, 'checkout', '-q', '--detach');
   await assert.rejects(execute(detached, run(), fakeExecutor()), /HEAD está desacoplado/);
 });
+
+test('lee los subagentes de OpenCode, el formato de la tienda del curso', async () => {
+  const cwd = fixture(undefined, { format: 'opencode' });
+  const runtime = loadRuntime(cwd);
+  assert.equal(runtime.format, 'opencode');
+  assert.equal(runtime.roles.validator.skillName, 'feature-validator');
+  assert.match(runtime.roles.planner.developerInstructions, /Fixture planner instructions/);
+  assert.doesNotMatch(runtime.roles.planner.developerInstructions, /permission:/);
+  const current = run();
+  await execute(cwd, current, fakeExecutor());
+  assert.equal(current.status, 'review');
+});
+
+test('rechaza un subagente de OpenCode que no usa la skill de su rol', () => {
+  const cwd = fixture(undefined, { format: 'opencode' });
+  put(cwd, '.opencode/agents/validator.md', '---\nmode: subagent\n---\nValida como quieras.\n');
+  assert.throws(() => loadRuntime(cwd), /validator no usa la skill feature-validator/);
+});

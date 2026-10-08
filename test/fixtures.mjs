@@ -12,7 +12,7 @@ export function put(root, path, value) {
 export function feature(id = 'example', depends_on = []) {
   return { id, area: 'test', title: `Feature ${id}`, user_visible_behavior: `Works: ${id}`, depends_on, status: 'not_started', verification: ['node --test passes'], evidence: [], notes: 'Disposable fixture' };
 }
-export function fixture(features = [feature()]) {
+export function fixture(features = [feature()], { format = 'codex' } = {}) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'ai-expert-harness-test-')));
   put(root, 'AGENTS.md', 'Follow the configured roles. Do not push or deploy.');
   put(root, 'PROGRESS.md', '# Progress\n');
@@ -21,10 +21,11 @@ export function fixture(features = [feature()]) {
   let config = '[agents]\nenabled = true\n';
   for (const [role, skill] of Object.entries(roleSkills)) {
     config += `\n[agents.${role}]\nconfig_file = "./agents/${role}.toml"\n`;
-    put(root, `.codex/agents/${role}.toml`, `name = "${role}"\nmodel = "fixture-model"\nmodel_reasoning_effort = "max"\nsandbox_mode = "workspace-write"\ndeveloper_instructions = """\nFixture ${role} instructions.\n"""\n`);
+    if (format === 'opencode') put(root, `.opencode/agents/${role}.md`, `---\ndescription: Fixture ${role}.\nmode: subagent\npermission:\n  skill:\n    "*": deny\n    ${skill}: allow\n---\n\nFixture ${role} instructions. Use $${skill}.\n`);
+    else put(root, `.codex/agents/${role}.toml`, `name = "${role}"\nmodel = "fixture-model"\nmodel_reasoning_effort = "max"\nsandbox_mode = "workspace-write"\ndeveloper_instructions = """\nFixture ${role} instructions.\n"""\n`);
     put(root, `.agents/skills/${skill}/SKILL.md`, `# ${skill}\nUse the actual ${role} responsibilities.`);
   }
-  put(root, '.codex/config.toml', config);
+  if (format === 'codex') put(root, '.codex/config.toml', config);
   const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   git('init', '-b', 'main');
   git('config', 'user.name', 'Harness fixture');

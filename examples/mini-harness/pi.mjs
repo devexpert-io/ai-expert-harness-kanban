@@ -1,6 +1,6 @@
 // Paso 1 · Un agente es un proceso: le mandamos JSON por stdin y nos devuelve eventos JSON por stdout.
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,12 +10,12 @@ const skills = { planner: 'feature-spec', implementer: 'feature-implementer', va
 /** Lo que ya construisteis en los módulos 2–4: AGENTS.md, el subagente y su skill. */
 export function loadRole(project, name) {
   const read = (path) => readFileSync(join(project, path), 'utf8');
-  const agent = read(`.codex/agents/${name}.toml`);
-  const field = (key) => agent.match(new RegExp(`^${key}\\s*=\\s*"([^"]*)"`, 'm'))?.[1];
-  const instructions = agent.match(/developer_instructions\s*=\s*"""([^]*?)"""/)?.[1].trim();
+  // La tienda define los subagentes para OpenCode (.md con frontmatter); otros repos, para Codex (.toml).
+  const instructions = existsSync(join(project, '.opencode/agents'))
+    ? read(`.opencode/agents/${name}.md`).replace(/^---[^]*?\n---\n/, '').trim()
+    : read(`.codex/agents/${name}.toml`).match(/developer_instructions\s*=\s*"""([^]*?)"""/)?.[1].trim();
   const skillPath = join(project, `.agents/skills/${skills[name]}/SKILL.md`);
-  return { name, skill: skills[name], thinking: field('model_reasoning_effort') ?? 'medium', skillPath,
-    system: [read('AGENTS.md'), instructions].join('\n\n') };
+  return { name, skill: skills[name], thinking: 'medium', skillPath, system: [read('AGENTS.md'), instructions].join('\n\n') };
 }
 
 /** El contrato de salida: sin un resultado estructurado, el host no avanza. */
