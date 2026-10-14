@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { inspectProject } from './project-contract.mjs';
 import { digest, loadRuntime, runtimeSummary } from './project-runtime.mjs';
 import { executeFeature } from './feature-flow.mjs';
@@ -24,7 +24,8 @@ export class FeatureQueue {
     this.piVersion = piVersion;
     this.credentials = credentials;
     this.maxParallel = maxParallel;
-    this.worktreeRoot = worktreeRoot ?? join(store.path, '..', 'worktrees');
+    // Absolute on purpose: git runs inside the project, the harness elsewhere; a relative root means two places.
+    this.worktreeRoot = resolve(worktreeRoot ?? join(store.path, '..', 'worktrees'));
     this.detect = detect;
     this.reviewOptions = reviewOptions;
     this.active = new Map();

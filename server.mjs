@@ -38,6 +38,7 @@ async function readJson(request) {
 }
 
 export function createHarnessServer({ statePath = process.env.HARNESS_STATE_PATH ?? join(root, '.harness-data/state.json'), select = chooseProject, executor, piVersion, piOptions = {}, env = process.env, verify = verifyKey, queueOptions = {} } = {}) {
+  statePath = resolve(statePath); // HARNESS_STATE_PATH may be relative (pnpm dev:ensayo)
   const release = acquireServerLock(statePath);
   const options = { ...configuredPiOptions(), ...piOptions };
   if (piVersion === undefined) {

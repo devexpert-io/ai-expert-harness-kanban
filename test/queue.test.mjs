@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { FeatureQueue } from '../harness/queue.mjs';
@@ -150,4 +150,20 @@ test('la clave configurada llega al entorno de Pi sin estar en el estado', async
   await until(() => queue.data.runs[0].status === 'review');
   assert.equal(seen, 'sk-fixture');
   assert.doesNotMatch(readFileSync(statePath, 'utf8'), /sk-fixture/);
+});
+
+test('una ruta de estado relativa no separa el worktree que crea git del que busca el harness', async () => {
+  const cwd = fixture([feature()]);
+  const home = fixture();
+  const previous = process.cwd();
+  process.chdir(home);
+  try {
+    const queue = new FeatureQueue({ store: new StateStore('.harness-data/ensayo/state.json'), executor: fakeExecutor(), piVersion: 'fixture' });
+    queue.select(inspectProject(cwd));
+    queue.enqueue(['example']);
+    await until(() => ['review', 'blocked'].includes(queue.data.runs[0].status));
+    assert.equal(queue.data.runs[0].error ?? null, null);
+    assert.ok(queue.data.runs[0].worktree.startsWith(realpathSync(home)));
+    assert.equal(existsSync(join(cwd, '.harness-data')), false);
+  } finally { process.chdir(previous); }
 });
