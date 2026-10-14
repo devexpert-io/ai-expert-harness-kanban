@@ -11,7 +11,7 @@ pnpm dev
 # http://localhost:4173
 ```
 
-La API key de DevExpert Inference se configura desde la UI (**Configurar API key**): se comprueba contra `/v1/models`, vive en memoria y solo se guarda en disco (`.harness-data/credentials.json`, permisos 600) si marcas *Recordarla*. Nunca vuelve al navegador. También vale `DEVEXPERT_API_KEY` en el entorno, por ejemplo con `~/.local/bin/oprun pnpm dev`; la de la UI tiene prioridad.
+La API key de DevExpert Inference se configura desde la UI (**Configurar API key**): se comprueba contra `/v1/models`, vive en memoria y solo se guarda en disco (`.harness-data/credentials.json`, permisos 600) si marcas *Recordarla*. Nunca vuelve al navegador. También vale `DEVEXPERT_API_KEY` en el entorno (`DEVEXPERT_API_KEY=… pnpm dev`); la de la UI tiene prioridad.
 
 Para ensayar sin inferencia: `pnpm dev:ensayo` usa `examples/mini-harness/fake-pi.mjs`, que habla el protocolo RPC de Pi y hace un trabajo mínimo por rol, con un estado separado en `.harness-data/ensayo/`. Revisa siempre en ramas locales (`HARNESS_REVIEW=local`): un ensayo nunca hace push ni abre PRs, aunque el proyecto tenga un remoto en GitHub.
 
@@ -54,7 +54,7 @@ El adaptador rechaza configuraciones incompatibles en vez de inventar un rol. Ca
 
 El modelo de ejecución está fijado explícitamente en **DevExpert Inference → `chat`** para los tres roles (`harness/pi-config.mjs`). Se conservan sus instrucciones, skills y esfuerzo de razonamiento, sin modificar la configuración del proyecto objetivo. La UI muestra el modelo efectivo. Ni `PI_MODEL`, ni `PI_PROVIDER`, ni las credenciales presentes en el entorno cambian esa selección; no hay fallback a OpenAI u otro modelo.
 
-La extensión local `harness/devexpert-provider.mjs` registra el alias `chat` de `https://inference.devexpert.io/v1` y usa `$DEVEXPERT_API_KEY` proporcionada por `oprun`. No escribe configuración global de Pi ni almacena claves. Su metadata no estima costes del servicio. `PI_BIN` y `PI_TIMEOUT_MS` (30 minutos por rol por defecto) siguen disponibles.
+La extensión local `harness/devexpert-provider.mjs` registra el alias `chat` de `https://inference.devexpert.io/v1` y usa `$DEVEXPERT_API_KEY`, que le pasa el host (la clave de la UI o la del entorno). No escribe configuración global de Pi ni almacena claves. Su metadata no estima costes del servicio. `PI_BIN` y `PI_TIMEOUT_MS` (30 minutos por rol por defecto) siguen disponibles.
 
 ### Contrato único
 
@@ -97,7 +97,7 @@ pnpm check          # Fixtures Git desechables, sin proveedor, sin red y sin Git
 pnpm check:pi       # Protocolo RPC local, sin inferencia
 
 # Opt-in: consume una ejecución real. Copia skills/roles, no modifica el origen.
-HARNESS_SOURCE_PROJECT=/ruta/al/proyecto ~/.local/bin/oprun pnpm check:pi:e2e
+HARNESS_SOURCE_PROJECT=/ruta/al/proyecto DEVEXPERT_API_KEY=… pnpm check:pi:e2e
 ```
 
 Las pruebas cubren roles reales del adaptador, ciclo de reparación, paralelo con worktrees, revisión humana (integrar, sincronizar ramas y pedir cambios), adaptador de GitHub con gh simulado, API key, aceptación/commit, recuperación de escrituras interrumpidas, preservación de WIP, cola/dependencias, cancelación, persistencia, errores de proveedor, API HTTP y el modelo de vista de la UI. La prueba real usa una feature mínima en un repositorio temporal y conserva su ruta para inspección.
