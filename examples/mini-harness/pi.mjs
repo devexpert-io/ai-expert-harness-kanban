@@ -1,7 +1,7 @@
 // Paso 1 · Un agente es un proceso: le mandamos JSON por stdin y nos devuelve eventos JSON por stdout.
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const provider = fileURLToPath(new URL('../../harness/devexpert-provider.mjs', import.meta.url));
@@ -33,7 +33,9 @@ export function runRole({ cwd, role, prompt, onEvent = () => {}, env = process.e
     '--extension', provider, '--provider', 'devexpert', '--model', 'chat', '--thinking', role.thinking,
     '--skill', role.skillPath, '--append-system-prompt', role.system];
   if (enforce) { args.push('--extension', permissions); env = { ...env, HARNESS_ROLE: role.name }; }
-  const pi = spawn(env.PI_BIN ?? 'pi', args, { cwd, env, stdio: ['pipe', 'pipe', 'inherit'] });
+  // Una ruta relativa en PI_BIN se resuelve aquí: Pi arranca dentro del proyecto, no donde estás tú.
+  const bin = env.PI_BIN?.includes('/') ? resolve(env.PI_BIN) : env.PI_BIN ?? 'pi';
+  const pi = spawn(bin, args, { cwd, env, stdio: ['pipe', 'pipe', 'inherit'] });
   return new Promise((resolve, reject) => {
     let text = '';
     let buffer = '';

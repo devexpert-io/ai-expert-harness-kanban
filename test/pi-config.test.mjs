@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { resolve } from 'node:path';
 import { pinnedPi, piOptions } from '../harness/pi-config.mjs';
 import registerDevExpert from '../harness/devexpert-provider.mjs';
 
@@ -20,4 +21,10 @@ test('extensión registra solo chat contra DevExpert usando referencia de entorn
   assert.equal(config.baseUrl, 'https://inference.devexpert.io/v1');
   assert.equal(config.apiKey, '$DEVEXPERT_API_KEY');
   assert.deepEqual(config.models.map((model) => model.id), ['chat']);
+});
+
+test('PI_BIN relativo se resuelve, porque Pi se ejecuta dentro del worktree', () => {
+  assert.equal(piOptions({ PI_BIN: 'examples/mini-harness/fake-pi.mjs' }).piBin, resolve('examples/mini-harness/fake-pi.mjs'));
+  assert.equal(piOptions({ PI_BIN: '/opt/pi' }).piBin, '/opt/pi');
+  assert.equal(piOptions({}).piBin, 'pi');
 });
