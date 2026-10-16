@@ -93,6 +93,13 @@ test('mini-harness: un paso de la tabla puede esperar a una persona', async () =
   }
 });
 
+test('mini-harness: varias preguntas seguidas no pierden respuestas y el proceso termina', () => {
+  const script = `const { preguntar } = await import(${JSON.stringify(join(directory, 'persona.mjs'))}); console.log(await preguntar('¿uno?'), await preguntar('¿dos?'));`;
+  const run = spawnSync(process.execPath, ['--input-type=module', '-e', script], { input: 's\nn\n', encoding: 'utf8', timeout: 5_000 });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /true false/);
+});
+
 test('mini-harness: la copia recoge tus cambios sin commitear, como una regla nueva', () => {
   const project = fixture([feature('search')], { format: 'opencode' });
   writeFileSync(join(project, '.opencode/agents/planner.md'), '---\nmode: subagent\npermission:\n  edit: deny\n---\nUse $feature-spec.\n');
