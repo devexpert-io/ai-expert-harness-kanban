@@ -1,2 +1,4 @@
 node_modules/
 .harness-data/
+# El enlace a tu proyecto del mini-harness (ln -s /ruta/a/tu/tienda-m6 tienda)
+examples/mini-harness/tienda

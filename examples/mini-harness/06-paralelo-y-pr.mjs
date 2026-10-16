@@ -1,11 +1,13 @@
 // Paso 6 · Varias features a la vez, cada una en su worktree, y una PR como revisión humana.
-// node 06-paralelo-y-pr.mjs <proyecto> [--pr]
+// node 06-paralelo-y-pr.mjs [--pr]
 import { execFileSync } from 'node:child_process';
 import { basename, dirname, join } from 'node:path';
 import { completeFeature } from './04-el-host-decide.mjs';
 import { git, readFeatures, readyFeatures } from './03-la-cola.mjs';
+import { start } from './proyecto.mjs';
 
-const [project, flag] = process.argv.slice(2);
+const { copy: project, args } = start();
+const flag = args.includes('--pr') ? '--pr' : null;
 const ready = readyFeatures(readFeatures(project));
 console.log(`Listas en paralelo: ${ready.map((item) => item.id).join(', ') || 'ninguna'}`);
 

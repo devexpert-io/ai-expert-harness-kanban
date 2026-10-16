@@ -1,5 +1,5 @@
 // Paso 2 · El loop: quién va después lo decide este código, no un LLM leyendo una skill.
-// node 02-el-loop.mjs <proyecto> <feature-id>
+// node 02-el-loop.mjs [feature-id]   (por defecto: la siguiente lista)
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,8 +28,12 @@ export async function featureLoop(project, feature, { maxRepairs = 3, onStep = (
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [project, id] = process.argv.slice(2);
-  const feature = JSON.parse(readFileSync(join(project, 'feature_list.json'), 'utf8')).find((item) => item.id === id);
-  const accepted = await featureLoop(project, feature, { onStep: (role) => console.log(`▶ ${role}`) });
+  const { start } = await import('./proyecto.mjs');
+  const { readyFeatures } = await import('./03-la-cola.mjs');
+  const { copy, args: [id] } = start();
+  const list = JSON.parse(readFileSync(join(copy, 'feature_list.json'), 'utf8'));
+  const feature = id ? list.find((item) => item.id === id) : readyFeatures(list)[0];
+  if (!feature) throw new Error(id ? `No existe la feature ${id}` : 'No quedan features listas');
+  const accepted = await featureLoop(copy, feature, { onStep: (role) => console.log(`▶ ${role}`) });
   console.log('✔ aceptada por el validator:', accepted.summary);
 }

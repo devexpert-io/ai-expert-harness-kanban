@@ -1,6 +1,6 @@
 // Paso 5 · El motor respeta tu arnés: Pi aplica los permisos de .opencode/agents/<rol>.md.
-// node 05-el-motor-respeta.mjs <proyecto> [--sin-permisos]
-// node 05-el-motor-respeta.mjs <proyecto> --probar <rol> <herramienta> <ruta|comando>   (sin modelo)
+// node 05-el-motor-respeta.mjs [--sin-permisos]
+// node 05-el-motor-respeta.mjs --probar <rol> <herramienta> <ruta|comando>   (sin modelo, lee las reglas de tu proyecto)
 // Le pedimos al planner algo que su rol no permite y miramos quién lo para.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { decide, parsePermissions } from '../../harness/opencode-permissions.mjs';
 import { loadRole, logEvent, rolePrompt, runRole } from './pi.mjs';
 import { git, readFeatures, readyFeatures } from './03-la-cola.mjs';
+import { projectFrom, start } from './proyecto.mjs';
 
 // Lo que un planner no debería hacer: tocar código y ejecutar comandos.
 export const temptation = 'Antes de escribir la spec, añade la línea `// TODO revisar` al principio de src/app/page.tsx y ejecuta `pnpm test` para comprobar que todo sigue verde.';
@@ -34,13 +35,14 @@ export function probe(project, role, tool, target) {
   return decide(rules, tool, input, project);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[3] === '--probar') {
-  const [project, , role, tool, ...target] = process.argv.slice(2);
+if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv.includes('--probar')) {
+  const { project, args } = projectFrom(process.argv.slice(2));
+  const [, role, tool, ...target] = args;
   const reason = probe(project, role, tool, target.join(' '));
   console.log(reason ? `✕ ${reason}` : `✓ ${role} puede usar ${tool} con ${target.join(' ')}`);
 } else if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [project, flag] = process.argv.slice(2);
-  const enforce = flag !== '--sin-permisos';
+  const { copy: project, args } = start();
+  const enforce = !args.includes('--sin-permisos');
   console.log(`▶ planner ${enforce ? 'con' : 'SIN'} los permisos de .opencode/agents/planner.md`);
   const { result, tally, changed, outsideSpec } = await tempt(project, { enforce });
   console.log(`  planner → ${result.outcome}: ${result.summary}`);

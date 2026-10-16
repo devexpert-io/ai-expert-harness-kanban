@@ -1,7 +1,8 @@
 // Paso 4 · El host comprueba en vez de creerse lo que dice cada rol.
-// node 04-el-host-decide.mjs <proyecto>
+// node 04-el-host-decide.mjs [--todas]   (por defecto, solo la siguiente feature lista)
 import { featureLoop } from './02-el-loop.mjs';
-import { git, markAccepted, readFeatures, readyFeatures } from './03-la-cola.mjs';
+import { committed, git, markAccepted, plantPrivateNotes, readFeatures, readyFeatures } from './03-la-cola.mjs';
+import { start } from './proyecto.mjs';
 
 /** Archivos cambiados respecto a HEAD, con su contenido, para saber qué ha tocado de verdad cada rol. */
 function snapshot(cwd) {
@@ -34,12 +35,15 @@ export async function completeFeature(cwd, feature, { onStep = () => {} } = {}) 
 }
 
 if (process.argv[1]?.endsWith('04-el-host-decide.mjs')) {
-  const [project] = process.argv.slice(2);
+  const { copy: project, args } = start();
+  plantPrivateNotes(project);
   let next;
   while ((next = readyFeatures(readFeatures(project))[0])) {
     console.log(`\n■ ${next.id} · ${next.title}`);
     const { commit } = await completeFeature(project, next, { onStep: (role) => console.log(`▶ ${role}`) });
     console.log(`✔ ${next.id} aceptada · commit ${commit}`);
+    console.log(committed(project, 'notas-privadas.txt') ? '⚠ notas-privadas.txt se ha colado en el commit' : '✓ notas-privadas.txt se ha quedado fuera del commit');
+    if (!args.includes('--todas')) break;
   }
-  console.log('\nNo quedan features listas.');
+  console.log(`\nCompruébalo: git -C ${project} status --short`);
 }
