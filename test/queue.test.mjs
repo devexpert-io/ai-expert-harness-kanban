@@ -167,3 +167,15 @@ test('una ruta de estado relativa no separa el worktree que crea git del que bus
     assert.equal(existsSync(join(cwd, '.harness-data')), false);
   } finally { process.chdir(previous); }
 });
+
+test('continuar desde este paso reanuda una cola pausada por un reinicio', async () => {
+  const { queue, statePath } = setup([feature()], async () => { throw new Error('proveedor caído'); });
+  queue.enqueue(['example']);
+  await until(() => queue.data.runs[0].status === 'blocked');
+  await queue.close(); // shutdown pauses the queue on purpose
+  const restored = new FeatureQueue({ store: new StateStore(statePath), executor: fakeExecutor(), piVersion: 'fixture' });
+  assert.equal(restored.data.paused, true);
+  restored.action(restored.data.runs[0].id, 'retry');
+  await until(() => restored.data.runs[0].status === 'review');
+  assert.equal(restored.data.paused, false);
+});

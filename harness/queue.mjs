@@ -176,6 +176,8 @@ export class FeatureQueue {
     } else if (action === 'retry' && needsAttention(run)) {
       run.status = 'queued';
       run.error = null;
+      // Continuing is an explicit go-ahead: a queue paused by a restart must not leave it waiting silently.
+      this.data.paused = false;
       this.save();
       this.pump();
     } else if (action === 'discard' && ['queued', 'blocked', 'interrupted'].includes(run.status)) {
