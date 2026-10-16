@@ -4,7 +4,6 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { start } from './proyecto.mjs';
-import { featureLoop } from './02-el-loop.mjs';
 
 export const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trimEnd();
 export const readFeatures = (project) => JSON.parse(readFileSync(join(project, 'feature_list.json'), 'utf8'));
@@ -33,6 +32,8 @@ export function plantPrivateNotes(project) {
 export const committed = (project, path) => git(project, 'show', '--name-only', '--format=', 'HEAD').split('\n').includes(path);
 
 if (process.argv[1]?.endsWith('03-la-cola.mjs')) {
+  // Import dinámico: 02-el-loop.mjs también usa esta cola, y uno estático en los dos sentidos se quedaría esperando.
+  const { featureLoop } = await import('./02-el-loop.mjs');
   const { copy: project, args } = start();
   plantPrivateNotes(project);
   let next;

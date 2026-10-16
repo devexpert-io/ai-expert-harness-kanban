@@ -18,6 +18,13 @@ test('mini-harness: sin proyecto enlazado explica cómo enlazarlo, sin traza', (
   assert.throws(() => execFileSync(process.execPath, [join(directory, '03-la-cola.mjs'), '--proyecto', '/tmp'], { env, encoding: 'utf8', stdio: 'pipe' }), /No hay feature_list.json en \/tmp/);
 });
 
+test('mini-harness paso 2: el loop lleva la siguiente feature lista de planner a accept', () => {
+  const project = fixture([feature('search'), feature('filters', ['search'])]);
+  const output = execFileSync(process.execPath, [join(directory, '02-el-loop.mjs'), '--proyecto', project], { env, encoding: 'utf8', timeout: 20_000 });
+  assert.match(output, /▶ planner[^]*▶ implementer[^]*▶ validator[^]*✔ aceptada por el validator/);
+  assert.doesNotMatch(output, /filters/);
+});
+
 test('mini-harness paso 3: el commit ingenuo se lleva las notas privadas; tu proyecto no se toca', () => {
   const project = fixture([feature('search'), feature('filters', ['search'])]);
   const output = step('03-la-cola.mjs', '--proyecto', project);
