@@ -27,7 +27,15 @@ export function parseResult(text) {
   return JSON.parse(match[1]);
 }
 
-export function runRole({ cwd, role, prompt, onEvent = () => {}, env = process.env, enforce = false }) {
+// La clave: la del entorno o la que guardaste en el Kanban («Recordarla»). Así no hay que teclearla en clase.
+const saved = fileURLToPath(new URL('../../.harness-data/credentials.json', import.meta.url));
+export function withApiKey(env = process.env) {
+  if (env.DEVEXPERT_API_KEY || !existsSync(saved)) return env;
+  const { apiKey } = JSON.parse(readFileSync(saved, 'utf8'));
+  return apiKey ? { ...env, DEVEXPERT_API_KEY: apiKey } : env;
+}
+
+export function runRole({ cwd, role, prompt, onEvent = () => {}, env = withApiKey(), enforce = false }) {
   const args = ['--mode', 'rpc', '--no-session', '--no-approve', '--no-extensions', '--no-skills', '--no-context-files',
     '--tools', 'read,bash,edit,write,grep,find,ls',
     '--extension', provider, '--provider', 'devexpert', '--model', 'chat', '--thinking', role.thinking,

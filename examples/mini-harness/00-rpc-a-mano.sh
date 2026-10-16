@@ -4,7 +4,15 @@
 # Se ocultan los eventos de streaming (message_update, tool_execution_update) para ver la conversación.
 set -euo pipefail
 harness="$(cd "$(dirname "$0")/../.." && pwd)"
-: "${DEVEXPERT_API_KEY:?Exporta DEVEXPERT_API_KEY con tu clave de DevExpert Inference}"
+# La clave nunca se teclea a la vista: la del entorno, la que guardaste en el Kanban o, si no hay, se pide oculta.
+if [ -z "${DEVEXPERT_API_KEY:-}" ] && [ -f "$harness/.harness-data/credentials.json" ]; then
+  DEVEXPERT_API_KEY="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).apiKey ?? "")' "$harness/.harness-data/credentials.json")"
+fi
+if [ -z "${DEVEXPERT_API_KEY:-}" ]; then
+  read -r -s -p "API key de DevExpert Inference (no se muestra): " DEVEXPERT_API_KEY < /dev/tty && echo >&2
+fi
+export DEVEXPERT_API_KEY
+echo "Pi listo. Pega una línea JSON y pulsa Enter (Ctrl+C para salir)." >&2
 pi --mode rpc --no-session --no-approve --no-extensions \
   --provider devexpert --model chat --extension "$harness/harness/devexpert-provider.mjs" \
   | jq -c --unbuffered 'select(.type | test("_update$") | not)
