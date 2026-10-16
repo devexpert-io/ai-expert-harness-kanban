@@ -33,8 +33,16 @@ export function prBody(run) {
   ].join('\n\n');
 }
 
+/** owner/name from a GitHub remote URL (https or ssh). */
+export function repoSlug(remote = '') {
+  return remote.match(/github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?\/?$/)?.[1] ?? null;
+}
+
 export function createReview(settings, repo, { exec = run } = {}) {
   const github = settings.mode === 'github';
+  // Always name the repo: with an `upstream` remote (a fork, as the course sets up), gh would pick upstream.
+  const slug = repoSlug(settings.remote ?? (github ? tryRun('git', ['remote', 'get-url', 'origin'], { cwd: repo }) : ''));
+  const gh = (args, options) => exec('gh', [...args, ...(slug ? ['--repo', slug] : [])], options);
   return {
     settings,
     /** The ref new feature branches start from; for GitHub it is refreshed first so merged PRs are included. */
@@ -48,17 +56,17 @@ export function createReview(settings, repo, { exec = run } = {}) {
       try {
         exec('git', ['push', '--quiet', '-u', 'origin', `${current.branch}:${current.branch}`], { cwd: current.worktree });
         if (current.pr) {
-          if (feedback) exec('gh', ['pr', 'comment', String(current.pr.number), '--body-file', '-'], { cwd: current.worktree, input: `Cambios pedidos en la revisión humana, ya aplicados y revalidados:\n\n> ${feedback.replace(/\n/g, '\n> ')}\n\n${current.summary ?? ''}` });
+          if (feedback) gh(['pr', 'comment', String(current.pr.number), '--body-file', '-'], { cwd: current.worktree, input: `Cambios pedidos en la revisión humana, ya aplicados y revalidados:\n\n> ${feedback.replace(/\n/g, '\n> ')}\n\n${current.summary ?? ''}` });
           return current.pr;
         }
-        const url = exec('gh', ['pr', 'create', '--base', settings.base, '--head', current.branch, '--title', `feat: ${current.title} (${current.taskId})`, '--body-file', '-'], { cwd: current.worktree, input: prBody(current) }).split('\n').at(-1);
+        const url = gh(['pr', 'create', '--base', settings.base, '--head', current.branch, '--title', `feat: ${current.title} (${current.taskId})`, '--body-file', '-'], { cwd: current.worktree, input: prBody(current) }).split('\n').at(-1);
         return { url, number: Number(url.match(/\/pull\/(\d+)/)?.[1]) };
       } catch (error) { throw new Error(`No se pudo publicar la PR: ${reason(error)}`); }
     },
     /** open · merged · closed */
     status(current) {
       if (github) {
-        const view = JSON.parse(exec('gh', ['pr', 'view', String(current.pr.number), '--json', 'state'], { cwd: repo }));
+        const view = JSON.parse(gh(['pr', 'view', String(current.pr.number), '--json', 'state'], { cwd: repo }));
         return view.state === 'MERGED' ? 'merged' : view.state === 'CLOSED' ? 'closed' : 'open';
       }
       try { git(repo, 'rev-parse', '--verify', `refs/heads/${current.branch}`); } catch { return 'closed'; }
@@ -72,7 +80,7 @@ export function createReview(settings, repo, { exec = run } = {}) {
     },
     merge(current) {
       if (github) {
-        try { exec('gh', ['pr', 'merge', String(current.pr.number), '--squash'], { cwd: repo }); } catch (error) { throw new Error(`GitHub no permitió el merge: ${reason(error)}`); }
+        try { gh(['pr', 'merge', String(current.pr.number), '--squash'], { cwd: repo }); } catch (error) { throw new Error(`GitHub no permitió el merge: ${reason(error)}`); }
         return;
       }
       if (git(repo, 'symbolic-ref', '--short', 'HEAD') !== settings.base) throw new Error(`Cambia el repositorio a ${settings.base} para integrar la rama`);
