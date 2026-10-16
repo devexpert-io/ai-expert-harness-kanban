@@ -110,11 +110,11 @@ test('si el rol olvida <harness-result>, el host se lo pide una vez en la misma 
   const actual = await runPiRole({ task, role, runtime, cwd: '/tmp', spawnImpl, emit: (event) => events.push(event) });
   assert.equal(actual.outcome, 'passing');
   assert.equal(prompts.length, 2);
-  assert.match(prompts[1], /No repitas el trabajo/);
+  assert.match(prompts[1], /Do not redo the work[^]*<harness-result>\{"outcome":"passing\|block"/);
   assert.match(actual.output, /Implementer report[^]*<harness-result>/);
-  assert.ok(events.some((event) => event.level === 'warn' && /se lo pide una vez/.test(event.message)));
+  assert.ok(events.some((event) => event.level === 'warn' && /recuerda el formato \(1\/2\)/.test(event.message)));
 });
-test('si tampoco lo devuelve tras el recordatorio, el rol falla sin avanzar', async () => {
+test('si tampoco lo devuelve tras dos recordatorios, el rol falla sin avanzar', async () => {
   const report = { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'Sin bloque.' }] } };
   let prompts = 0;
   const spawnImpl = () => {
@@ -125,5 +125,11 @@ test('si tampoco lo devuelve tras el recordatorio, el rol falla sin avanzar', as
     return child;
   };
   await assert.rejects(runPiRole({ task, role, runtime, cwd: '/tmp', spawnImpl }), /falta un único resultado estructurado/);
-  assert.equal(prompts, 2);
+  assert.equal(prompts, 3);
+});
+
+test('un resultado incompleto dice qué campo falla y qué ha llegado', () => {
+  assert.throws(() => parseRoleResult('<harness-result>{"outcome":"passing|block","summary":"hecho","evidence":["x"],"files":["a"]}</harness-result>', 'implementer'),
+    /outcome debe ser "passing" o "block" · recibido: \{"outcome":"passing\|block"/);
+  assert.throws(() => parseRoleResult('<harness-result>{"status":"passing","summary":"hecho"}</harness-result>', 'implementer'), /recibido: \{"status":"passing"/);
 });

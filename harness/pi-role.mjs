@@ -7,10 +7,15 @@ import { piTools } from './opencode-permissions.mjs';
 
 const permissionsExtension = fileURLToPath(new URL('./opencode-permissions.mjs', import.meta.url));
 
-export function buildPiPrompt({ task, role, repairBrief, humanFeedback, baseline, files = [] }) {
-  const schema = role.name === 'validator'
+/** The structured handoff each role must end with; shared by the prompt and the reminder. */
+export function resultSchema(roleName) {
+  return roleName === 'validator'
     ? '{"verdict":"accept|revise|block","summary":"...","evidence":["check and actual result"],"repairBrief":"required for revise","testing":"concrete local testing steps","files":["every reviewed changed path"]}'
-    : `{"outcome":"${role.name === 'planner' ? 'ready' : 'passing'}|block","summary":"...","evidence":["actual result"],"files":["every path changed by you"],"testing":"concrete local testing steps"}`;
+    : `{"outcome":"${roleName === 'planner' ? 'ready' : 'passing'}|block","summary":"...","evidence":["actual result"],"files":["every path changed by you"],"testing":"concrete local testing steps"}`;
+}
+
+export function buildPiPrompt({ task, role, repairBrief, humanFeedback, baseline, files = [] }) {
+  const schema = resultSchema(role.name);
   return [
     `Selected feature: ${task.id}: ${task.title}. Objective: ${task.objective}`,
     `Your configured role: ${role.name}. Use $${role.skillName}.`,
@@ -31,15 +36,23 @@ export function buildPiPrompt({ task, role, repairBrief, humanFeedback, baseline
 }
 
 export function resultReminder(role, problem) {
-  return `Tu respuesta final no se puede usar: ${problem}. No repitas el trabajo ni cambies archivos. Responde solo con un único bloque <harness-result>{...}</harness-result> con el contrato de tu rol (${role}), con lo que ya has hecho y comprobado.`;
+  return [
+    `Your final answer cannot be used: ${problem}.`,
+    'Do not redo the work and do not change files. Reply with exactly one block and nothing else:',
+    `<harness-result>${resultSchema(role)}</harness-result>`,
+    'Replace the placeholders with what you actually did and checked. Pick one literal value where the schema shows alternatives (for example "passing", not "passing|block"). evidence and files must be non-empty lists of strings.'
+  ].join('\n\n');
 }
 
 export function parseRoleResult(text, role) {
   const matches = [...text.matchAll(/<harness-result>\s*([^]*?)\s*<\/harness-result>/g)];
   if (matches.length !== 1) throw new Error(`${role}: falta un único resultado estructurado; no se avanzará de fase`);
   let result;
-  try { result = JSON.parse(matches[0][1]); } catch { throw new Error(`${role}: resultado JSON inválido`); }
-  return validateRoleResult(result, role);
+  try { result = JSON.parse(matches[0][1]); } catch { throw new Error(`${role}: resultado JSON inválido (${matches[0][1].slice(0, 160)})`); }
+  try { return validateRoleResult(result, role); } catch (error) {
+    // Say what arrived: a vague «incompleto» is impossible to act on in class.
+    throw new Error(`${error.message} · recibido: ${JSON.stringify(result).slice(0, 200)}`);
+  }
 }
 
 export function validateRoleResult(result, role) {
@@ -48,7 +61,9 @@ export function validateRoleResult(result, role) {
   if (result.outcome === 'blocked') result.outcome = 'block';
   const outcome = role === 'validator' ? result.verdict : result.outcome;
   const allowed = role === 'validator' ? ['accept', 'revise', 'block'] : [role === 'planner' ? 'ready' : 'passing', 'block'];
-  if (!allowed.includes(outcome) || typeof result.summary !== 'string' || !result.summary.trim()) throw new Error(`${role}: resultado incompleto`);
+  const field = role === 'validator' ? 'verdict' : 'outcome';
+  if (!allowed.includes(outcome)) throw new Error(`${role}: resultado incompleto, ${field} debe ser ${allowed.map((value) => `"${value}"`).join(' o ')}`);
+  if (typeof result.summary !== 'string' || !result.summary.trim()) throw new Error(`${role}: resultado incompleto, falta summary`);
   for (const key of ['evidence', 'files']) {
     if (!Array.isArray(result[key]) || result[key].some((item) => typeof item !== 'string' || !item.trim())) throw new Error(`${role}: ${key} debe ser una lista de textos`);
   }
@@ -106,7 +121,7 @@ export async function runPiRole({ task, role, runtime, cwd, emit = () => {}, sig
     let finalText = '';
     let stderr = '';
     let agentError = null;
-    let reminded = false;
+    let reminders = 0;
     let report = '';
     const decoder = new StringDecoder('utf8');
     let buffer = '';
@@ -140,10 +155,10 @@ export async function runPiRole({ task, role, runtime, cwd, emit = () => {}, sig
         if (agentError) return finish(agentError);
         try { finish(null, parseRoleResult(finalText, role.name)); } catch (error) {
           // A role that did the work but forgot the handoff gets one reminder in the same session.
-          if (reminded) return finish(error);
-          reminded = true;
-          report = finalText;
-          emit({ stage: roleStages[role.name], role: role.name, skill: role.skillName, level: 'warn', message: `${role.name} no devolvió <harness-result>; el host se lo pide una vez` });
+          if (reminders >= 2) return finish(error);
+          reminders++;
+          if (!report) report = finalText;
+          emit({ stage: roleStages[role.name], role: role.name, skill: role.skillName, level: 'warn', message: `${role.name}: ${error.message}; el host le recuerda el formato (${reminders}/2)` });
           // Deferred so the reminder never re-enters the stdout handler that is still parsing this line.
           setImmediate(() => { if (!finished) child.stdin.write(`${JSON.stringify({ id: `${task.id}-${role.name}-result`, type: 'prompt', message: resultReminder(role.name, error.message) })}\n`); });
         }
