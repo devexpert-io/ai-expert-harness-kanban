@@ -6,6 +6,7 @@ import { loadRuntime, roleStages, digest } from './project-runtime.mjs';
 import { runPiRole, validateRoleResult } from './pi-role.mjs';
 import { pinnedPi } from './pi-config.mjs';
 import { assertWorkspace, featureChanges, fileHash, git, sameSnapshot, scopedCommit, snapshot, startWorkspace } from './git-workspace.mjs';
+import { jsonLike } from './json-text.mjs';
 
 const temporaryPath = (path) => `${path}.harness-tmp`;
 function atomicText(path, text) {
@@ -17,9 +18,10 @@ function removeStaleTemporaries(cwd, paths) {
   for (const path of paths) rmSync(temporaryPath(join(cwd, path)), { force: true });
 }
 function writeFeatureStatus(cwd, id, status) {
-  const features = readFeatures(cwd);
+  const original = readFileSync(join(cwd, 'feature_list.json'), 'utf8');
+  const features = JSON.parse(original);
   features.find((item) => item.id === id).status = status;
-  atomicText(join(cwd, 'feature_list.json'), `${JSON.stringify(features, null, 2)}\n`);
+  atomicText(join(cwd, 'feature_list.json'), jsonLike(original, features));
 }
 function readFeatures(cwd) { return JSON.parse(readFileSync(join(cwd, 'feature_list.json'), 'utf8')); }
 function taskNow(cwd, id) {
@@ -157,7 +159,8 @@ export async function executeFeature({ run, cwd, signal, save, emit, executor = 
       if (task.sourceStatus !== 'passing') throw new Error('Solo una feature passing puede recibir aceptación independiente');
       const files = featureChanges(cwd, run.baseline);
       if (files.some((path) => !run.ownedFiles.includes(path) || !result.files.includes(path))) throw new Error('Hay cambios sin autoría o sin revisión del validator; no se hará un commit mixto');
-      const features = readFeatures(cwd);
+      const listText = readFileSync(join(cwd, 'feature_list.json'), 'utf8');
+      const features = JSON.parse(listText);
       const selected = features.find((item) => item.id === task.id);
       selected.status = 'accepted';
       selected.evidence = [...new Set([...selected.evidence, `Independent validator accept: ${result.summary}`, ...result.evidence])];
@@ -167,7 +170,7 @@ export async function executeFeature({ run, cwd, signal, save, emit, executor = 
         files: allFiles, beforeHashes: Object.fromEntries(allFiles.map((path) => [path, fileHash(cwd, path)])),
         message: `${run.reopen ? `fix: address review of ${task.id}` : `feat: complete ${task.id}`}\n\nHarness-Run: ${run.id}`,
         documents: {
-          'feature_list.json': `${JSON.stringify(features, null, 2)}\n`,
+          'feature_list.json': jsonLike(listText, features),
           'PROGRESS.md': `${progress.trimEnd()}\n\n## ${task.id} · independent validator accept\n\n${result.summary}\n\n${result.evidence.map((item) => `- ${item}`).join('\n')}\n\nCómo probarlo: ${result.testing}\n`
         }
       };

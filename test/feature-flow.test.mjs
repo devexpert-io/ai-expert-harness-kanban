@@ -5,7 +5,8 @@ import test from 'node:test';
 import { executeFeature } from '../harness/feature-flow.mjs';
 import { git } from '../harness/git-workspace.mjs';
 import { loadRuntime } from '../harness/project-runtime.mjs';
-import { fixture, put, fakeExecutor } from './fixtures.mjs';
+import { jsonLike, prettierJson } from '../harness/json-text.mjs';
+import { feature, fixture, put, fakeExecutor } from './fixtures.mjs';
 
 const run = () => ({ id: 'test-run', taskId: 'example', events: [], steps: [], status: 'running' });
 const execute = (cwd, current, executor) => executeFeature({ cwd, run: current, executor, save() {}, emit() {} });
@@ -32,6 +33,24 @@ test('planifica, implementa, repara, valida, persiste accepted y hace un commit 
   assert.equal(git(cwd, 'status', '--porcelain'), '');
   assert.match(git(cwd, 'log', '-1', '--format=%B'), /feat: complete example/);
   assert.equal(current.commit, git(cwd, 'rev-parse', 'HEAD'));
+});
+
+test('al aceptar respeta el formato de feature_list.json: el commit solo cambia lo de la feature', async () => {
+  const cwd = fixture([feature('example'), feature('other', ['example'])]);
+  const prettier = (path) => put(cwd, path, prettierJson(JSON.parse(readFileSync(join(cwd, path), 'utf8'))));
+  prettier('feature_list.json');
+  git(cwd, 'commit', '-qam', 'test: prettier feature list');
+  // Como un agente que edita a mano: conserva el formato del archivo.
+  const base = fakeExecutor();
+  const executor = async (context) => {
+    const result = await base(context);
+    if (context.role.name === 'implementer') prettier('feature_list.json');
+    return result;
+  };
+  await execute(cwd, run(), executor);
+  const diff = git(cwd, 'show', '--format=', '--unified=0', 'HEAD', '--', 'feature_list.json').split('\n').filter((line) => /^[-+] /.test(line));
+  assert.deepEqual(diff.filter((line) => line.startsWith('-')), ['-    "status": "not_started",', '-    "evidence": [],']);
+  assert.ok(diff.every((line) => !/depends_on|verification|"other"/.test(line)), diff.join('\n'));
 });
 
 test('preserva cambios previos en skills sin incluirlos en el commit', async () => {
