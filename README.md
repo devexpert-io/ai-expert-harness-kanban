@@ -15,7 +15,7 @@ La API key de DevExpert Inference se configura desde la UI (**Configurar API key
 
 Para ensayar sin inferencia: `pnpm dev:ensayo` usa `examples/mini-harness/fake-pi.mjs`, que habla el protocolo RPC de Pi y hace un trabajo mínimo por rol, con un estado separado en `.harness-data/ensayo/`. Revisa siempre en ramas locales (`HARNESS_REVIEW=local`): un ensayo nunca hace push ni abre PRs, aunque el proyecto tenga un remoto en GitHub.
 
-La versión didáctica, en cinco pasos, está en [`examples/mini-harness`](examples/mini-harness/README.md).
+La versión didáctica, en un archivo con el flujo, las reglas y el bucle, está en [`examples/mini-harness`](examples/mini-harness/README.md).
 
 ## Uso
 

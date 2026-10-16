@@ -1,13 +1,14 @@
-// Dónde está tu proyecto y en qué copia se trabaja.
+// Tu proyecto: dónde está, en qué copia se trabaja y qué features tiene.
 // El harness no vive en tu proyecto: lo apunta. Aquí lo apunta el enlace `tienda` de esta carpeta
 //   ln -s /ruta/a/tu/tienda-m6 tienda
-// o, si lo prefieres, `--proyecto <ruta>` en cualquier paso.
-// Cada paso trabaja en una copia desechable: tu fork no se toca (el Kanban es quien trabaja sobre él).
+// o, si lo prefieres, `--proyecto <ruta>` en cualquier comando.
+// Cada ejecución trabaja en una copia desechable: tu fork no se toca (el Kanban es quien trabaja sobre él).
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdtempSync, realpathSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { jsonLike } from '../../harness/json-text.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trimEnd();
@@ -30,7 +31,7 @@ export function projectFrom(argv) {
  * (por ejemplo, una regla nueva en .opencode/agents) y tus .env. El remoto apunta al mismo origin.
  */
 export function workingCopy(project) {
-  const copy = join(mkdtempSync(join(tmpdir(), 'mini-harness-')), 'tienda');
+  const copy = join(realpathSync(mkdtempSync(join(tmpdir(), 'mini-harness-'))), 'tienda');
   git(tmpdir(), 'clone', '-q', project, copy);
   const diff = git(project, 'diff', 'HEAD', '--binary');
   if (diff) execFileSync('git', ['apply', '--whitespace=nowarn'], { cwd: copy, input: `${diff}\n` });
@@ -39,7 +40,27 @@ export function workingCopy(project) {
   return copy;
 }
 
-/** Lo habitual al empezar un paso: resolver el proyecto, copiarlo y decir dónde se trabaja. */
+export const features = (proyecto) => JSON.parse(readFileSync(join(proyecto, 'feature_list.json'), 'utf8'));
+export const estadoDe = (proyecto, id) => features(proyecto).find((feature) => feature.id === id)?.status;
+
+/** La siguiente que se puede empezar: no aceptada, no bloqueada y con todas sus dependencias aceptadas. */
+export function siguienteLista(proyecto) {
+  const lista = features(proyecto);
+  const aceptadas = new Set(lista.filter((feature) => feature.status === 'accepted').map((feature) => feature.id));
+  return lista.find((feature) => !['accepted', 'blocked'].includes(feature.status) && feature.depends_on.every((id) => aceptadas.has(id)));
+}
+
+/** La aceptación la escribe el host, nunca un rol. */
+export function marcarAceptada(proyecto, id, resumen) {
+  const original = readFileSync(join(proyecto, 'feature_list.json'), 'utf8');
+  const lista = JSON.parse(original);
+  const feature = lista.find((item) => item.id === id);
+  feature.status = 'accepted';
+  feature.evidence.push(`Independent validator accept: ${resumen}`);
+  writeFileSync(join(proyecto, 'feature_list.json'), jsonLike(original, lista)); // con el formato del archivo: el diff es solo lo que cambia
+}
+
+/** Lo habitual al empezar: resolver el proyecto, copiarlo y decir dónde se trabaja. */
 export function start(argv = process.argv.slice(2)) {
   let found;
   try { found = projectFrom(argv); } catch (error) { console.error(error.message); process.exit(1); }

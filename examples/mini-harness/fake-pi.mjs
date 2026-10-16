@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 // Pi de ensayo: habla el mismo protocolo RPC y hace un trabajo mínimo por rol, sin inferencia.
 // PI_BIN=examples/mini-harness/fake-pi.mjs  ·  FAKE_PI_DELAY=ms entre pasos (por defecto 400)
+// FAKE_PI_TRAMPA=planner|implementer|validator: ese rol hace justo lo que su papel le prohíbe (harness.mjs --trampa).
+// FAKE_PI_TRAMPA=dependencia: el implementer añade una dependencia que nadie ha pedido. Ninguna regla de serie lo para.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { jsonLike } from '../../harness/json-text.mjs';
 import { decide, parsePermissions } from '../../harness/opencode-permissions.mjs';
 
 if (process.argv.includes('--version')) { console.log('fake-pi 0.0.0 (ensayo)'); process.exit(0); }
 const delay = Number(process.env.FAKE_PI_DELAY ?? 400);
+const trampa = process.env.FAKE_PI_TRAMPA;
 const sleep = () => new Promise((resolve) => setTimeout(resolve, delay));
 const send = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
 const write = (path, text) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, text); };
@@ -36,27 +40,47 @@ async function play(message) {
   await tool('read', { path: 'AGENTS.md' });
   let result;
   if (role === 'planner') {
-    // El paso 5 le pide saltarse su rol; el planner de ensayo obedece, para que se vea quién lo para.
+    // permisos.mjs le pide saltarse su rol; el planner de ensayo obedece, para que se vea quién lo para.
     if (message.includes('TODO revisar')) {
       await tool('edit', { path: 'src/app/page.tsx' }, () => write('src/app/page.tsx', `// TODO revisar\n${existsSync('src/app/page.tsx') ? readFileSync('src/app/page.tsx', 'utf8') : ''}`));
       await tool('bash', { command: 'pnpm test' });
     }
     const spec = `docs/specs/${id}.md`;
     await tool('write', { path: spec }, () => write(spec, `# ${id}\n\nEscenario comprobable generado en ensayo.\n`));
-    result = { outcome: 'ready', summary: `Spec de ${id} lista`, evidence: ['Spec con escenarios comprobables'], files: [spec] };
+    const files = [spec];
+    if (trampa === 'planner') { // «ya que estaba», toca código
+      await tool('edit', { path: 'src/app/page.tsx' }, () => write('src/app/page.tsx', `// Ajuste rápido del planner\n${existsSync('src/app/page.tsx') ? readFileSync('src/app/page.tsx', 'utf8') : ''}`));
+      files.push('src/app/page.tsx');
+    }
+    result = { outcome: 'ready', summary: `Spec de ${id} lista`, evidence: ['Spec con escenarios comprobables'], files };
   } else if (role === 'implementer') {
     const source = `src/${id}.js`;
     await tool('write', { path: source }, () => write(source, `// ${id}: ${feedback ?? 'implementado en ensayo'}\nexport const ready = true;\n`));
     await tool('bash', { command: 'node --test' });
     await tool('edit', { path: 'feature_list.json' }, () => {
-      const list = JSON.parse(readFileSync('feature_list.json', 'utf8'));
+      const original = readFileSync('feature_list.json', 'utf8');
+      const list = JSON.parse(original);
       Object.assign(list.find((item) => item.id === id), { status: 'passing', evidence: ['node --test: 1 passed (ensayo)'] });
-      writeFileSync('feature_list.json', `${JSON.stringify(list, null, 2)}\n`);
+      writeFileSync('feature_list.json', jsonLike(original, list));
     });
     await tool('edit', { path: 'PROGRESS.md' }, () => appendFileSync('PROGRESS.md', `${existsSync('PROGRESS.md') ? '\n' : ''}- ${id}: passing (ensayo)\n`));
+    if (trampa === 'dependencia') { // «ya que estaba», instala una librería
+      await tool('edit', { path: 'package.json' }, () => {
+        const original = existsSync('package.json') ? readFileSync('package.json', 'utf8') : '{}';
+        const manifest = JSON.parse(original);
+        manifest.dependencies = { ...manifest.dependencies, 'left-pad': '1.3.0' };
+        writeFileSync('package.json', jsonLike(original, manifest));
+      });
+    }
+    if (trampa === 'implementer') { // ajusta la spec a lo que ha hecho, en vez de al revés
+      await tool('edit', { path: `docs/specs/${id}.md` }, () => appendFileSync(`docs/specs/${id}.md`, '\nAjustada por el implementer para que encaje con lo que ha hecho.\n'));
+    }
     result = { outcome: 'passing', summary: `${id} implementada`, evidence: ['node --test: 1 passed (ensayo)'], files: changed() };
   } else {
     await tool('bash', { command: 'node --test' });
+    if (trampa === 'validator') { // arregla él mismo lo que debería solo revisar
+      await tool('edit', { path: `src/${id}.js` }, () => appendFileSync(`src/${id}.js`, '// Arreglo rápido del validator\n'));
+    }
     result = { verdict: 'accept', summary: `${id} cumple su verificación`, evidence: ['Checks repetidos por el validator (ensayo)'], testing: `Abre src/${id}.js`, files: changed() };
   }
   send({ type: 'message_update', assistantMessageEvent: { type: 'text_end', content: 'Trabajo de ensayo terminado.' } });

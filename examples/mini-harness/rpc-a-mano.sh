@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Práctica 1 · Habla con Pi a mano: ./00-rpc-a-mano.sh [--proyecto <ruta>] (por defecto, el enlace `tienda`).
+# Práctica 1 · Habla con Pi a mano: ./rpc-a-mano.sh [--proyecto <ruta>] (por defecto, el enlace `tienda`).
 # Pi arranca dentro del proyecto, para ver su feature_list.json y su AGENTS.md. Pega una línea JSON, por ejemplo:
 #   {"type":"prompt","message":"¿Qué features de feature_list.json están listas para empezar?"}
 # Se ocultan los eventos de streaming (message_update, tool_execution_update) para ver la conversación.
