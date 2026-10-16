@@ -133,3 +133,9 @@ test('un resultado incompleto dice qué campo falla y qué ha llegado', () => {
     /outcome debe ser "passing" o "block" · recibido: \{"outcome":"passing\|block"/);
   assert.throws(() => parseRoleResult('<harness-result>{"status":"passing","summary":"hecho"}</harness-result>', 'implementer'), /recibido: \{"status":"passing"/);
 });
+test('con feedback humano, el planner actualiza la spec y el implementer no la toca', () => {
+  const planner = { ...role, name: 'planner', skillName: 'feature-spec' };
+  assert.match(buildPiPrompt({ task, role: planner, humanFeedback: 'Unidades, no líneas' }), /update the specification and its acceptance scenarios/);
+  assert.match(buildPiPrompt({ task, role, humanFeedback: 'Unidades, no líneas' }), /do not edit the specification/);
+  assert.doesNotMatch(buildPiPrompt({ task, role: planner }), /update the specification and its acceptance/);
+});

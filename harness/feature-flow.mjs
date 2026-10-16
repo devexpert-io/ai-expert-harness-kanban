@@ -85,12 +85,13 @@ export async function executeFeature({ run, cwd, signal, save, emit, executor = 
     run.steps = [];
     save();
   }
-  // Human rework reopens an accepted feature; the harness owns that status change.
+  // Human rework reopens an accepted feature; the harness owns that status change. Feedback can change
+  // what the feature must do, so the planner updates the spec first: only the planner may touch it.
   if (run.reopen && !run.reopened) {
     writeFeatureStatus(cwd, run.taskId, 'in_progress');
     run.reopened = true;
     run.ownedFiles = ['feature_list.json'];
-    run.nextRole = 'implementer';
+    run.nextRole = 'planner';
     save();
   }
   if (run.acceptance) return finalize({ run, cwd, save, emit });

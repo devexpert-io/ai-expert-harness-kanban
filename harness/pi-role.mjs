@@ -29,6 +29,8 @@ export function buildPiPrompt({ task, role, repairBrief, humanFeedback, baseline
     'Work on this feature only. Do not create further subagents. The host orchestrates the three independent roles.',
     'No hagas merge, push, deploy, cambios de credenciales ni operaciones de producción. Do not commit, stage, switch branches, or alter Git configuration/hooks. The host owns acceptance and the scoped commit.',
     role.name === 'planner' ? 'Change only the selected specification. Do not change feature_list.json, PROGRESS.md, or product code.' : '',
+    role.name === 'planner' && humanFeedback ? 'The human feedback may change the expected behaviour: update the specification and its acceptance scenarios so they reflect it. The implementer will work against your updated spec and may not edit it.' : '',
+    role.name === 'implementer' && humanFeedback ? 'The planner has already updated the specification for this feedback. Implement against it; do not edit the specification.' : '',
     role.name === 'implementer' ? 'Update only the selected feature to passing after actual verification, with evidence; update PROGRESS.md. Never set accepted.' : '',
     role.name === 'validator' ? 'Inspect independently and rerun checks. Do not modify any tracked or untracked file; return validation in the response. A failed or unrun required gate cannot be accept.' : '',
     `End your final response with exactly one <harness-result>${schema}</harness-result> JSON object, replacing placeholders with actual results. Include all changed/reviewed file paths. If unable to proceed, return block and explain why. This structured handoff does not replace the project skill.`

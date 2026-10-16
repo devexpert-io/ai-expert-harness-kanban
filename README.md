@@ -27,7 +27,7 @@ La versión didáctica, en cinco pasos, está en [`examples/mini-harness`](examp
 6. El validator puede aceptar, pedir correcciones o bloquear. Las correcciones vuelven al implementer y se validan otra vez (máximo tres por intento).
 7. Tras la aceptación independiente, el host hace el commit en la rama y la publica para **revisión humana**: en GitHub hace push y abre una PR con resumen, evidencia y cómo probarlo; en local la rama queda lista para integrar.
 8. **Mergear PR** (squash con `gh`) o **Integrar en <base>** (merge `--no-ff` en tu checkout, que debe estar limpio y en la base) completa la feature. También puedes mergear en GitHub: el tablero consulta las PR cada 20 s (o con **Comprobar PRs**).
-9. **Pedir cambios** conserva la rama y la PR y lanza otra vuelta implementer → validator con tu feedback. Acaba en un commit `fix: address review of <id>` en la misma PR, con tu feedback como comentario.
+9. **Pedir cambios** conserva la rama y la PR y lanza otra vuelta planner → implementer → validator con tu feedback: el planner ajusta la spec (tu feedback puede cambiar lo que la feature debe hacer, y solo él puede tocarla), el implementer la implementa y el validator revalida. Acaba en un commit `fix: address review of <id>` en la misma PR, con tu feedback como comentario.
 
 Una dependencia solo cuenta cuando está **integrada** en la base: nada se construye sobre un cambio que no has revisado. Mientras tanto sus dependientes esperan en cola.
 

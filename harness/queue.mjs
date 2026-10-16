@@ -197,7 +197,7 @@ export class FeatureQueue {
     review.merge(run);
     this.refreshReviews();
   }
-  /** Keeps the reviewed branch and queues another implementer → validator cycle with the human's feedback. */
+  /** Keeps the reviewed branch and queues another planner → implementer → validator cycle with the human's feedback. */
   reject(run, feedback) {
     if (typeof feedback !== 'string' || !feedback.trim()) throw new Error('Describe qué hay que cambiar');
     if (feedback.length > maxFeedback) throw new Error(`El feedback no puede superar ${maxFeedback} caracteres`);

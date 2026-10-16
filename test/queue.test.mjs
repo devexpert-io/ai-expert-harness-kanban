@@ -69,7 +69,7 @@ test('al integrar una rama, las demás se actualizan combinando feature_list.jso
   assert.equal(git(cwd, 'status', '--porcelain'), '');
 });
 
-test('pedir cambios relanza implementer → validator en la misma rama y hace un commit de corrección', async () => {
+test('pedir cambios relanza planner → implementer → validator en la misma rama y hace un commit de corrección', async () => {
   const calls = [];
   const { queue, cwd } = setup([feature('first'), feature('second', ['first'])], fakeExecutor({ calls }));
   queue.enqueue(['first', 'second']);
@@ -80,7 +80,7 @@ test('pedir cambios relanza implementer → validator en la misma rama y hace un
   assert.equal(original.status, 'changes-requested');
   const rework = () => queue.data.runs.find((run) => run.reopen);
   await until(() => rework()?.status === 'review');
-  assert.deepEqual(calls.slice(3), ['first:implementer', 'first:validator']);
+  assert.deepEqual(calls.slice(3), ['first:planner', 'first:implementer', 'first:validator']);
   assert.equal(rework().branch, original.branch);
   assert.match(git(rework().worktree, 'log', '-1', '--format=%s'), /fix: address review of first/);
   assert.match(readFileSync(join(rework().worktree, 'src/first.js'), 'utf8'), /Cambia el texto del botón/);
